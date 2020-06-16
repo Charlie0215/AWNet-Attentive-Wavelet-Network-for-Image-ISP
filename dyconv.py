@@ -60,9 +60,9 @@ class DyConv2d(nn.Conv2d):
         for i in range(input.size(0)):
             list.append(self._conv_forward(input[0:1], weight[0], bias[0]))
 
-        output = torch.stack(list, 0)
+        output = torch.cat(list, 0)
 
-        return output.squeeze(dim=1)
+        return output
 
 
 if __name__ == "__main__":
