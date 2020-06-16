@@ -52,7 +52,7 @@ def writer_add_image(dir, writer, image, iter):
     writer.add_image(dir, x, iter)
 
 
-def save_image(target, pred, img_name, root):
+def save_image(target, preds, img_name, root):
     '''
     : img: image to be saved
     : img_name: image name

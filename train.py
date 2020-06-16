@@ -12,11 +12,11 @@ import threading
 from tensorboardX import SummaryWriter
 import numpy as np
 
-from model import gc_unet
+from model import gc_unet, UNet
 from loss import Loss
 from dataloader import LoadData, LoadVisualData
 from config import trainConfig
-from utils import validation, adjust_learning_rate, writer_add_image, print_log, to_mse, to_psnr, poly_learning_decay
+from utils import validation, adjust_learning_rate, writer_add_image, print_log, to_psnr, poly_learning_decay
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -38,7 +38,7 @@ def train():
 
     # Initialize loss and model
     loss = Loss().to(device)
-    net = gc_unet().to(device)
+    net = UNet().to(device)
     net = nn.DataParallel(net, device_ids=device_ids)
 
     # Reload

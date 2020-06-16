@@ -1,0 +1,6 @@
+runs/
+weights/
+saved_checkpoints/
+best_weight/
+__pycache__/
+results/
