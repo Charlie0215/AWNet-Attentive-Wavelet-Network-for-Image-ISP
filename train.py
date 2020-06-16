@@ -89,9 +89,9 @@ def train():
             x, target, _ = data
             x = x.to(device, non_blocking=True)
             target = target.to(device, non_blocking=True)
-            y = net(x)
+            pred = net(x)
             optimizer.zero_grad()
-            total_loss, losses = loss(y, target)
+            total_loss, losses = loss(pred, target)
             total_loss.backward()
             optimizer.step()
 
@@ -108,26 +108,20 @@ def train():
                                 'ssim': losses[2].item(),
                                 }, iteration)
 
-            #mse_list.extend(to_mse(alpha_pred_right, alpha_gt))
-            psnr_list.extend(to_psnr(right_composed, right_images))
+            psnr_list.extend(to_psnr(pred, target))
 
             if iteration % 100 == 0:
-                threading.Thread(target=writer_add_image, args=('right_compose', writer, right_composed, iteration)).start()
-                threading.Thread(target=writer_add_image, args=('right_pred', writer, alpha_pred_right, iteration)).start()
-                threading.Thread(target=writer_add_image, args=('right_orig', writer, right_images, iteration)).start()   
+                threading.Thread(target=writer_add_image, args=('right_compose', writer, pred, iteration)).start()
+                threading.Thread(target=writer_add_image, args=('right_pred', writer, target, iteration)).start()
+            del x, target, pred
 
-                #threading.Thread(target=writer_add_image, args=('right_bg', writer, right_bg, iteration)).start()
-                #threading.Thread(target=writer_add_image, args=('left_orig', writer, left_images, iteration)).start()
-
-            
-            del right_composed, alpha_pred_right, right_images, left_images, fg, right_bg, left_bg#, alpha_pred_left, left_composed
         train_psnr = sum(psnr_list) / len(psnr_list)        
         state = {
                 "model_state": net.state_dict(),
                 "lr": new_lr,
             }
         print('saved checkpoint')
-        torch.save(state, './checkpoints/matting_epoch_{}_psnr_{}.pkl'.format(epoch, train_psnr))
+        torch.save(state, '{}/epoch_{}.pkl'.format(trainConfig.checkpoints, epoch))
         
         one_epoch_time = time.time() - start_time
         print('time: {}, train psnr: {}'.format(one_epoch_time, train_psnr))
@@ -146,7 +140,7 @@ def train():
             }
 
             print('saved best weight')
-            torch.save(state, './weight/matting_best.pkl')
+            torch.save(state, '{}/matting_best.pkl'.format(trainConfig.save_best))
             pre_psnr = val_psnr
 
 if __name__ == '__main__':
