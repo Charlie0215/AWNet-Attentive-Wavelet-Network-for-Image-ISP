@@ -69,9 +69,9 @@ def train():
     test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=1,
                              pin_memory=True, drop_last=False)
 
-    visual_dataset = LoadVisualData(trainConfig.data_dir, 10, scale=2, level=0)
-    visual_loader = DataLoader(dataset=visual_dataset, batch_size=1, shuffle=False, num_workers=0,
-                               pin_memory=True, drop_last=False)
+    # visual_dataset = LoadVisualData(trainConfig.data_dir, 10, scale=2, level=0)
+    # visual_loader = DataLoader(dataset=visual_dataset, batch_size=1, shuffle=False, num_workers=0,
+    #                            pin_memory=True, drop_last=False)
     print('Train loader length: {}'.format(len(train_loader)))
     
 
