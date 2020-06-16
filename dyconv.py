@@ -58,7 +58,7 @@ class DyConv2d(nn.Conv2d):
 
         list = []
         for i in range(input.size(0)):
-            list.append(self._conv_forward(input[0:1], weight[0], bias[0]))
+            list.append(self._conv_forward(input[i:i+1], weight[i], bias[i]))
 
         output = torch.cat(list, 0)
 
