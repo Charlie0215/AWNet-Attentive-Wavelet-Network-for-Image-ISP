@@ -62,7 +62,7 @@ class LoadData(Dataset):
         # dslr_image = np.float32(misc.imresize(dslr_image, self.scale / 2.0)) / 255.0
         dslr_image = torch.from_numpy(dslr_image.transpose((2, 0, 1)))
         # print(dslr_image.shape, raw_image.shape)
-        return raw_image, dslr_image
+        return raw_image, dslr_image, str(idx)
 
 
 class LoadVisualData(Dataset):
