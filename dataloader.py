@@ -5,6 +5,7 @@ from torchvision import transforms
 from scipy import misc
 import numpy as np
 import imageio
+import PIL.Image as Image
 import torch
 import os
 
@@ -53,11 +54,14 @@ class LoadData(Dataset):
         raw_image = extract_bayer_channels(raw_image)
         raw_image = torch.from_numpy(raw_image.transpose((2, 0, 1)))
 
-        dslr_image = misc.imread(os.path.join(self.dslr_dir, str(idx) + ".jpg"))
+        dslr_image = imageio.imread(os.path.join(self.dslr_dir, str(idx) + ".jpg"))
         dslr_image = np.asarray(dslr_image)
-        dslr_image = np.float32(misc.imresize(dslr_image, self.scale / 2.0)) / 255.0
+        dslr_img_shape = dslr_image.shape
+        dslr_image = np.float32(
+            np.array(Image.fromarray(dslr_image).resize((dslr_img_shape[0]*self.scale / 2.0, dslr_img_shape[1]*self.scale / 2.0)))) / 255.0
+        # dslr_image = np.float32(misc.imresize(dslr_image, self.scale / 2.0)) / 255.0
         dslr_image = torch.from_numpy(dslr_image.transpose((2, 0, 1)))
-
+        # print(dslr_image.shape, raw_image.shape)
         return raw_image, dslr_image
 
 
