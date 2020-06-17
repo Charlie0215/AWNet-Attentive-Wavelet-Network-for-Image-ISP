@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mmcv.cnn import constant_init, kaiming_init
-from utils import DWT, IWT
+from models_v1.utils import DWT, IWT
 
 class GCRDB(nn.Module):
     def __init__(self, in_channels, att_block, num_dense_layer=6, growth_rate=16):
@@ -168,7 +167,7 @@ class GCWTResDown(nn.Module):
 
 class GCIWTResUp(nn.Module):
 
-    def __init__(self, in_channels, att_block, device, norm_layer=None):
+    def __init__(self, in_channels, att_block, norm_layer=None):
         super().__init__()
         if norm_layer:
             self.stem = nn.Sequential(
@@ -190,7 +189,7 @@ class GCIWTResUp(nn.Module):
             )
         self.conv1x1 = nn.Conv2d(in_channels, in_channels//2, kernel_size=1, padding=0)
         self.att = att_block(in_channels//2, in_channels//2)
-        self.iwt = IWT(device)
+        self.iwt = IWT()
 
     def forward(self, x, x_dwt):
         stem = self.stem(x)
