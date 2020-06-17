@@ -141,7 +141,7 @@ class ContextBlock2d(nn.Module):
         return out
 
 class GCWTResDown(nn.Module):
-    def __init__(self, in_channels, att_block, norm_layer):
+    def __init__(self, in_channels, att_block, norm_layer=None):
         super().__init__()
         self.dwt = DWT()
         if norm_layer:
