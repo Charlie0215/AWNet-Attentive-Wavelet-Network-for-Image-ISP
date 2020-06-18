@@ -11,8 +11,9 @@ import time
 import threading
 from tensorboardX import SummaryWriter
 import numpy as np
+import shutil
 
-from model import gc_unet, UNet
+from models_v1.model import Generator#, PixelDiscriminator
 from loss import Loss
 from dataloader import LoadData, LoadVisualData
 from config import trainConfig
@@ -26,19 +27,19 @@ TRAIN_SIZE = 46839
 TEST_SIZE = 1204
 
 def train():
-    
-    writer = SummaryWriter('./runs')
+    shutil.rmtree('./runs_unet')
+    writer = SummaryWriter('./runs_unet')
     if torch.cuda.device_count() > 0:
-        device_ids = [1,0]
+        device_ids = [0]
         print('using device: {}'.format(device_ids))
     else: device_ids = [1]
-    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("CUDA visible devices: " + str(torch.cuda.device_count()))
     print("CUDA Device Name: " + str(torch.cuda.get_device_name(device)))
 
     # Initialize loss and model
     loss = Loss().to(device)
-    net = UNet().to(device)
+    net = Generator(4,3).to(device)
     net = nn.DataParallel(net, device_ids=device_ids)
 
     # Reload
@@ -47,11 +48,11 @@ def train():
         pre_lr = torch.load('./weight/save_best.pkl')["lr"]
         print('weight loaded.')
     else:
-        for m in net.modules():
-            if isinstance(m, nn.Conv2d):
-                init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
+        # for m in net.modules():
+        #     if isinstance(m, nn.Conv2d):
+        #         init.kaiming_uniform_(m.weight)
+        #         if m.bias is not None:
+        #             nn.init.constant_(m.bias, 0)
         print('no weight loaded.')
     pytorch_total_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
     print("Total_params: {}".format(pytorch_total_params))
@@ -62,11 +63,11 @@ def train():
 
     # Dataloaders
     train_dataset = LoadData(trainConfig.data_dir, TRAIN_SIZE, dslr_scale=2, test=False)
-    train_loader = DataLoader(dataset=train_dataset, batch_size=trainConfig.batch_size, shuffle=True, num_workers=1,
+    train_loader = DataLoader(dataset=train_dataset, batch_size=trainConfig.batch_size, shuffle=True, num_workers=18,
                               pin_memory=True, drop_last=True)
 
     test_dataset = LoadData(trainConfig.data_dir, TEST_SIZE, dslr_scale=2, test=True)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=1,
+    test_loader = DataLoader(dataset=test_dataset, batch_size=6, shuffle=False, num_workers=18,
                              pin_memory=True, drop_last=False)
 
     # visual_dataset = LoadVisualData(trainConfig.data_dir, 10, scale=2, level=0)
@@ -75,21 +76,20 @@ def train():
     print('Train loader length: {}'.format(len(train_loader)))
     
 
-    pre_psnr, pre_ssim = validation(net, test_loader, device, save_tag=True)
+    pre_psnr, pre_ssim = 0,0#validation(net, test_loader, device, save_tag=True)
     print(
         'previous PSNR: {:.4f}, previous ssim: {:.4f}'.format(pre_psnr, pre_ssim)
     )
     iteration = 0
     for epoch in range(trainConfig.epoch):
-        # mse_list = []
         psnr_list = []
         start_time = time.time() 
         new_lr = adjust_learning_rate(optimizer, scheduler, epoch, trainConfig.pre_lr, writer) 
         for batch_id, data in enumerate(train_loader):
             x, target, _ = data
-            x = x.to(device, non_blocking=True)
-            target = target.to(device, non_blocking=True)
-            pred = net(x)
+            x = x.to(device)
+            target = target.to(device)
+            pred, _ = net(x)
             optimizer.zero_grad()
             total_loss, losses = loss(pred, target)
             total_loss.backward()
@@ -111,8 +111,8 @@ def train():
             psnr_list.extend(to_psnr(pred, target))
 
             if iteration % 100 == 0:
-                threading.Thread(target=writer_add_image, args=('right_compose', writer, pred, iteration)).start()
-                threading.Thread(target=writer_add_image, args=('right_pred', writer, target, iteration)).start()
+                threading.Thread(target=writer_add_image, args=('pred', writer, pred, iteration)).start()
+                threading.Thread(target=writer_add_image, args=('target', writer, target, iteration)).start()
             del x, target, pred
 
         train_psnr = sum(psnr_list) / len(psnr_list)        
