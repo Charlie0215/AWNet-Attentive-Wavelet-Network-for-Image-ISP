@@ -7,6 +7,26 @@ import sys
 from skimage import measure
 import pytorch_ssim
 
+class GANLoss(nn.Module):
+    """Define different GAN objectives.
+    The GANLoss class abstracts away the need to create the target label tensor
+    that has the same size as the input.
+    """
+
+    def __init__(self, target_real_label=1.0, target_fake_label=0.0):
+        super(GANLoss, self).__init__()
+        self.loss = nn.BCEWithLogitsLoss()
+        self.register_buffer('real_label', torch.tensor(target_real_label))
+        self.register_buffer('fake_label', torch.tensor(target_fake_label))
+
+    def forward(self, prediction, target_is_real):
+        if target_is_real:
+            target_tensor = self.real_label
+        else:
+            target_tensor = self.fake_label
+        target_tensor.expand_as(prediction)   
+        loss = self.loss(prediction, target_tensor)
+        return loss
 
 class Loss(nn.Module):
     def __init__(self):
@@ -18,9 +38,10 @@ class Loss(nn.Module):
         self.mse_loss = nn.MSELoss()
         self.ssim_loss = pytorch_ssim.SSIM()
 
-    def forward(self, y, target):
+    def forward(self, y, target, fake_label=None):
         total_loss, losses = self.image_restoration(y, target)
-        
+        if fake_label:
+            total_loss += fake_label
         return total_loss, losses
 
     def image_restoration(self, pred, target):

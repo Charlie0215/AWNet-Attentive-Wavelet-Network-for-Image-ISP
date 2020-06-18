@@ -62,8 +62,8 @@ def save_image(target, preds, img_name, root):
     batch_num = len(preds)
 
     for ind in range(batch_num):
-        vutils.save_image(target[ind], root + '{}'.format(img_name[ind].split('.png')[0] + '_pred.png'))
-        vutils.save_image(preds[ind], root + '{}'.format(img_name[ind].split('.png')[0] + '_alpha.png'))
+        vutils.save_image(target[ind], root + '{}'.format(img_name[ind].split('.png')[0] + '_target.png'))
+        vutils.save_image(preds[ind], root + '{}'.format(img_name[ind].split('.png')[0] + '_pred.png'))
 
 
 def validation(net, val_data_loader, device, save_tag=False):
@@ -82,7 +82,7 @@ def validation(net, val_data_loader, device, save_tag=False):
             x, target, image_name = val_data
             x = x.to(device, non_blocking=True)
             target = target.to(device, non_blocking=True)
-            y = net(x)
+            y, _ = net(x)
 
         psnr_list.extend(to_psnr(y, target))
         ssim_list.extend(to_ssim_skimage(y, target))
@@ -94,6 +94,36 @@ def validation(net, val_data_loader, device, save_tag=False):
     avr_ssim = sum(ssim_list) / len(ssim_list)
 
     return avr_psnr, avr_ssim
+
+def validation_teacher(net, val_data_loader, device, save_tag=False):
+    psnr_list = []
+    ssim_list = []
+    mse_list = []
+    sad_list = []
+    save_folder = os.path.join(
+        './results', 'result_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '/'
+    )
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+
+    for batch_id, val_data in enumerate(val_data_loader):
+        with torch.no_grad():
+            x, target, image_name = val_data
+            x = x.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
+            y = net(target)
+
+        psnr_list.extend(to_psnr(y, target))
+        ssim_list.extend(to_ssim_skimage(y, target))
+        # Save image
+        if save_tag:
+            save_image(target, y, image_name, save_folder)
+
+    avr_psnr = sum(psnr_list) / len(psnr_list)
+    avr_ssim = sum(ssim_list) / len(ssim_list)
+
+    return avr_psnr, avr_ssim
+
 
 
 def to_psnr(dehaze, gt):
@@ -156,3 +186,11 @@ def poly_learning_decay(optimizer, iter, total_epoch, loader_length, writer):
         {'lr': learning_rate,
         }, iter)
     return learning_rate
+
+def set_requires_grad(nets, requires_grad=False):
+    if not isinstance(nets, list):
+        nets = [nets]
+    for net in nets:
+        if net is not None:
+            for param in net.parameters():
+                param.requires_grad = requires_grad

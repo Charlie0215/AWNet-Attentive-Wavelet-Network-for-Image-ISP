@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+# from mmcv.cnn import constant_init, kaiming_init
 from models_v1.utils import DWT, IWT
 
 class GCRDB(nn.Module):
@@ -17,7 +18,7 @@ class GCRDB(nn.Module):
         for i in range(num_dense_layer):
             modules.append(MakeDense(_in_channels, growth_rate))
             _in_channels += growth_rate
-        modules.append(att_block(inplanes=_in_channels, planes=_in_channels))
+        #modules.append(att_block(inplanes=_in_channels, planes=_in_channels))
         self.residual_dense_layers = nn.Sequential(*modules)
         self.conv_1x1 = nn.Conv2d(_in_channels, in_channels, kernel_size=1, padding=0)
         self.final_att = att_block(inplanes=in_channels, planes=in_channels)
@@ -31,7 +32,7 @@ class GCRDB(nn.Module):
 class MakeDense(nn.Module):
     def __init__(self, in_channels, growth_rate, kernel_size=3):
         super(MakeDense, self).__init__()
-        self.conv = nn.Conv2d(in_channels, growth_rate, kernel_size=kernel_size, padding=(kernel_size-1)//2)
+        self.conv = nn.Conv2d(in_channels, growth_rate, kernel_size=kernel_size, padding=(kernel_size-1)//2)    
 
     def forward(self, x):
         out = F.relu(self.conv(x))
@@ -81,7 +82,7 @@ class ContextBlock2d(nn.Module):
             self.channel_add_conv = nn.Sequential(
                 nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
                 nn.LayerNorm([self.planes // ratio, 1, 1]),
-                nn.ReLU(inplace=True),
+                nn.PReLU(),
                 nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1)
             )
         else:
@@ -90,7 +91,7 @@ class ContextBlock2d(nn.Module):
             self.channel_mul_conv = nn.Sequential(
                 nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
                 nn.LayerNorm([self.planes // ratio, 1, 1]),
-                nn.ReLU(inplace=True),
+                nn.PReLU(),
                 nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1)
             )
         else:
@@ -109,7 +110,7 @@ class ContextBlock2d(nn.Module):
             # [N, 1, H * W]
             context_mask = context_mask.view(batch, 1, height * width)
             # [N, 1, H * W]
-            context_mask = self.softmax(context_mask)#softmax操作
+            context_mask = self.softmax(context_mask)
             # [N, 1, H * W, 1]
             context_mask = context_mask.unsqueeze(3)
             # [N, 1, C, 1]
@@ -156,10 +157,13 @@ class GCWTResDown(nn.Module):
                                         nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
                                         nn.ReLU())
         self.conv1x1 = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+        self.conv_down = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, stride=2)
         self.att = att_block(in_channels*2, in_channels*2)
+        #self.avg_pool = nn.AdaptiveAvgPool2d(in_channels, stride=2)
     def forward(self, x):
         stem = self.stem(x)
         xLL, dwt = self.dwt(x)
+        #xLL = self.conv_down(x)
         res = self.conv1x1(xLL)
         out = torch.cat([stem, res], dim=1)
         out = self.att(out)
@@ -187,17 +191,57 @@ class GCIWTResUp(nn.Module):
                 nn.Conv2d(in_channels//2, in_channels//2, kernel_size = 3, padding = 1),
                 nn.PReLU(),
             )
-        self.conv1x1 = nn.Conv2d(in_channels, in_channels//2, kernel_size=1, padding=0)
-        self.att = att_block(in_channels//2, in_channels//2)
+        
+        self.pre_conv = nn.Conv2d(in_channels*2, in_channels*2, kernel_size=1, padding=0)
+        self.prelu = nn.PReLU()
+        self.conv1x1 = nn.Conv2d(in_channels//2, in_channels//2, kernel_size=1, padding=0)
+        self.att = att_block(in_channels//2, in_channels//8)
         self.iwt = IWT()
-
+        #self.up = nn.Upsample(scale_factor = 2, mode = 'bilinear', align_corners = False)
     def forward(self, x, x_dwt):
         stem = self.stem(x)
+        x_dwt = self.prelu(self.pre_conv(x_dwt))
         x_iwt = self.iwt(x_dwt)
-        out = torch.cat([stem, x_iwt], dim=1)
-        out = self.conv1x1(out)
+        x_iwt = self.conv1x1(x_iwt)
+        out = stem + x_iwt
         out = self.att(out)
         return out
+
+
+
+# class GCIWTResUp(nn.Module):
+
+#     def __init__(self, in_channels, att_block, device='cuda:1', norm_layer=None):
+#         super().__init__()
+#         if norm_layer:
+#             self.stem = nn.Sequential(
+#                 nn.Upsample(scale_factor = 2, mode = 'bilinear', align_corners = False),
+#                 nn.Conv2d(in_channels, in_channels//2, kernel_size = 3, padding = 1),
+#                 norm_layer(in_channels//2),
+#                 nn.PReLU(),
+#                 nn.Conv2d(in_channels//2, in_channels//2, kernel_size = 3, padding = 1),
+#                 norm_layer(in_channels//2),
+#                 nn.PReLU(),
+#             )
+#         else:
+#             self.stem = nn.Sequential(
+#                 nn.Upsample(scale_factor = 2, mode = 'bilinear', align_corners = False),
+#                 nn.Conv2d(in_channels, in_channels//2, kernel_size = 3, padding = 1),
+#                 nn.PReLU(),
+#                 nn.Conv2d(in_channels//2, in_channels//2, kernel_size = 3, padding = 1),
+#                 nn.PReLU(),
+#             )
+#         self.conv1x1 = nn.Conv2d(in_channels, in_channels//2, kernel_size=1, padding=0)
+#         self.att = att_block(in_channels//2, in_channels//2)
+#         self.iwt = IWT(device)
+
+#     def forward(self, x, x_dwt):
+#         stem = self.stem(x)
+#         x_iwt = self.iwt(x_dwt)
+#         out = torch.cat([stem, x_iwt], dim=1)
+#         out = self.conv1x1(out)
+#         out = self.att(out)
+#         return out
 
 class shortcutblock(nn.Module):
     def __init__(self, in_channels):
@@ -217,7 +261,7 @@ if __name__ == '__main__':
     net2 = GCWTResDown(64, ContextBlock2d)
     net3 = GCIWTResUp(128, ContextBlock2d, 'cpu')
     y = net(x)
-    y, dwt = net2(y)
-    y = net3(y, dwt)
+    y = net2(y)
+    y = net3(y)
     print(y.shape)
     

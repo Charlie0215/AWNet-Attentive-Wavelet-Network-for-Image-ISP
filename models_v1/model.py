@@ -6,7 +6,7 @@ from models_v1.modules import shortcutblock, GCIWTResUp, GCWTResDown, GCRDB, Con
 import functools
 
 class Generator(nn.Module):
-    def __init__(self, in_channels, out_channels, block=[1,2,2,2,2,4]):
+    def __init__(self, in_channels, out_channels, block=[1,1,1,2,2]):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
         
@@ -87,19 +87,20 @@ class Generator(nn.Module):
         x4, x4_dwt = self.layer3(x3)
         x5, x5_dwt = self.layer4(x4)
         x5_latent = self.layer5(x5)
-        x4_up = self.layer4_up(x5_latent, x5_dwt)
-        x4_up = self.layer4_gcrdb_up(x4_up) + self.sc_x4(x4)
-        x3_up = self.layer3_up(x4_up, x4_dwt)
-        x3_up = self.layer3_gcrdb(x3_up) + self.sc_x3(x3)
-        x2_up = self.layer2_up(x3_up, x3_dwt)
-        x2_up = self.layer2_gcrdb(x2_up) + self.sc_x2(x2)
-        x1_up = self.layer1_up(x2_up, x2_dwt)
-        x1_up = self.layer1_gcrdb(x1_up) + self.sc_x1(x1)
-        out = self.final_conv(x1_up)
+        x4_up = self.layer4_up(x5_latent, x5_dwt) + self.sc_x4(x4)
+        x4_up = self.layer4_gcrdb_up(x4_up) 
+        x3_up = self.layer3_up(x4_up, x4_dwt) + self.sc_x3(x3)
+        x3_up = self.layer3_gcrdb(x3_up) 
+        x2_up = self.layer2_up(x3_up, x3_dwt) + self.sc_x2(x2)
+        x2_up = self.layer2_gcrdb(x2_up) 
+        x1_up = self.layer1_up(x2_up, x2_dwt) + self.sc_x1(x1)
+        x1_up = self.layer1_gcrdb(x1_up) 
+        x1_up = self.final_conv(x1_up)
         return x1_up, x5_latent
 
+
 class teacher_encoder(nn.Module):
-    def __init__(self, in_channels=4, block=[2,3,3,3,5,7]):
+    def __init__(self, in_channels, block=[1,1,1,2,2]):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
         
@@ -138,13 +139,6 @@ class teacher_encoder(nn.Module):
         # _layer_5_dw.append(GCWTResDown(1024, ContextBlock2d, norm_layer=None))
         self.layer5 = nn.Sequential(*_layer_5_dw)
 
-        self.sc_x1 = shortcutblock(64)
-        self.sc_x2 = shortcutblock(128)
-        self.sc_x3 = shortcutblock(256)
-        self.sc_x4 = shortcutblock(512)
-        
-        self.final_conv = nn.Conv2d(64, out_channels, kernel_size=3, padding=1)
-
     def forward(self, x):
         x1 = self.conv1(x)
         x2, x2_dwt = self.layer1(x1)
@@ -152,10 +146,11 @@ class teacher_encoder(nn.Module):
         x4, x4_dwt = self.layer3(x3)
         x5, x5_dwt = self.layer4(x4)
         x5_latent = self.layer5(x5)
-        return x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5_latent, x5_dwt
+        return x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent
+
 
 class teacher_decoder(nn.Module):
-    def __init__(self, out_channels=3, block=[2,3,3,3,5,7]):
+    def __init__(self, out_channels, block=[1,1,1,2,2]):
         super().__init__()
 
         #upsample4
@@ -193,7 +188,7 @@ class teacher_decoder(nn.Module):
         
         self.final_conv = nn.Conv2d(64, out_channels, kernel_size=3, padding=1)
 
-    def forward(self, x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5_latent, x5_dwt):
+    def forward(self, x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent):
         x4_up = self.layer4_up(x5_latent, x5_dwt)
         x4_up = self.layer4_gcrdb_up(x4_up) + self.sc_x4(x4)
         x3_up = self.layer3_up(x4_up, x4_dwt)
@@ -203,7 +198,38 @@ class teacher_decoder(nn.Module):
         x1_up = self.layer1_up(x2_up, x2_dwt)
         x1_up = self.layer1_gcrdb(x1_up) + self.sc_x1(x1)
         x1_up = self.final_conv(x1_up)
+        # print(x1_up)
         return x1_up
+
+class teacher(nn.Module):
+    def __init__(self, path, is_train):
+        self.is_train = is_train
+        self.path = path
+        if self.is_train:
+            self.encoder = teacher_encoder(4)
+            self.decoder = teacher_decoder(3)
+        else:
+            self.encoder = teacher_encoder(4)
+            self.encoder.load_state_dict(torch.load('./weight/best_teacher.pkl')["model_state"])
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+    
+    def save_model(self):
+        state = {
+            "model_state": self.encoder.state_dict(),
+        }
+        torch.save(state, '{}/matting_best.pkl'.format(self.path))
+        
+    def forward(self, x):
+        if self.is_train:
+            x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent = self.encoder(x)
+            out = self.decoder(x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent)
+            return out, x5_latent
+        else:
+            out = self.encoder(x)
+            return out[-1]
+
+        
 
 class NLayerDiscriminator(nn.Module):
     """Defines a PatchGAN discriminator"""
@@ -280,6 +306,111 @@ class PixelDiscriminator(nn.Module):
     def forward(self, input):
         """Standard forward."""
         return self.net(input)
+
+class UNet(nn.Module):
+    def __init__(self, n_channels=4, n_classes=3, bilinear=True):
+        super(UNet, self).__init__()
+        self.n_channels = n_channels
+        self.n_classes = n_classes
+        self.bilinear = bilinear
+
+        self.inc = DoubleConv(n_channels, 64)
+        self.down1 = Down(64, 128)
+        self.down2 = Down(128, 256)
+        self.down3 = Down(256, 512)
+        factor = 2 if bilinear else 1
+        self.down4 = Down(512, 1024 // factor)
+        self.up1 = Up(1024, 512 // factor, bilinear)
+        self.up2 = Up(512, 256 // factor, bilinear)
+        self.up3 = Up(256, 128 // factor, bilinear)
+        self.up4 = Up(128, 64, bilinear)
+        self.outc = OutConv(64, n_classes)
+
+    def forward(self, x):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+        logits = self.outc(x)
+        return logits
+
+
+class DoubleConv(nn.Module):
+    """(convolution => [BN] => ReLU) * 2"""
+
+    def __init__(self, in_channels, out_channels, mid_channels=None):
+        super().__init__()
+        if not mid_channels:
+            mid_channels = out_channels
+        self.double_conv = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(mid_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        return self.double_conv(x)
+
+
+class Down(nn.Module):
+    """Downscaling with maxpool then double conv"""
+
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.maxpool_conv = nn.Sequential(
+            nn.MaxPool2d(2),
+            DoubleConv(in_channels, out_channels)
+        )
+
+    def forward(self, x):
+        return self.maxpool_conv(x)
+
+
+class Up(nn.Module):
+    """Upscaling then double conv"""
+
+    def __init__(self, in_channels, out_channels, bilinear=True):
+        super().__init__()
+
+        # if bilinear, use the normal convolutions to reduce the number of channels
+        if bilinear:
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
+        else:
+            self.up = nn.ConvTranspose2d(in_channels , in_channels // 2, kernel_size=2, stride=2)
+            self.conv = DoubleConv(in_channels, out_channels)
+
+
+    def forward(self, x1, x2):
+        x1 = self.up(x1)
+        # input is CHW
+        diffY = x2.size()[2] - x1.size()[2]
+        diffX = x2.size()[3] - x1.size()[3]
+
+        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
+                        diffY // 2, diffY - diffY // 2])
+        # if you have padding issues, see
+        # https://github.com/HaiyongJiang/U-Net-Pytorch-Unstructured-Buggy/commit/0e854509c2cea854e247a9c615f175f76fbb2e3a
+        # https://github.com/xiaopeng-liao/Pytorch-UNet/commit/8ebac70e633bac59fc22bb5195e513d5832fb3bd
+        x = torch.cat([x2, x1], dim=1)
+        return self.conv(x)
+
+
+class OutConv(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(OutConv, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+
+    def forward(self, x):
+        return self.conv(x)
 
 if __name__ == '__main__':
     x = torch.randn(1, 3, 448, 448)
