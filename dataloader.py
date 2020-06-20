@@ -8,6 +8,7 @@ import imageio
 import PIL.Image as Image
 import torch
 import os
+import random
 
 to_tensor = transforms.Compose([
     transforms.ToTensor()
