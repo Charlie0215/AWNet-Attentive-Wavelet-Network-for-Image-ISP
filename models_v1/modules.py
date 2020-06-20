@@ -3,6 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 # from mmcv.cnn import constant_init, kaiming_init
 from models_v1.utils import DWT, IWT
+try:
+    import sys
+    sys.path.append("dcn")
+    from dcn_v2 import DCN
+except ImportError:
+    raise ImportError('Failed to import DCNv2 module.')
 
 class GCRDB(nn.Module):
     def __init__(self, in_channels, att_block, num_dense_layer=6, growth_rate=16):
@@ -33,9 +39,10 @@ class MakeDense(nn.Module):
     def __init__(self, in_channels, growth_rate, kernel_size=3):
         super(MakeDense, self).__init__()
         self.conv = nn.Conv2d(in_channels, growth_rate, kernel_size=kernel_size, padding=(kernel_size-1)//2)    
-
+        self.norm_layer = nn.BatchNorm2d(growth_rate)
     def forward(self, x):
         out = F.relu(self.conv(x))
+        out = self.norm_layer(out)
         out = torch.cat((x, out), 1)
         return out
 
@@ -141,7 +148,7 @@ class ContextBlock2d(nn.Module):
         return out
 
 class GCWTResDown(nn.Module):
-    def __init__(self, in_channels, att_block, norm_layer=None):
+    def __init__(self, in_channels, att_block, norm_layer=nn.BatchNorm2d):
         super().__init__()
         self.dwt = DWT()
         if norm_layer:
@@ -168,6 +175,47 @@ class GCWTResDown(nn.Module):
         out = torch.cat([stem, res], dim=1)
         out = self.att(out)
         return out, dwt
+
+class GCIWTResUp_deform(nn.Module):
+
+    def __init__(self, in_channels, att_block):
+        super().__init__()
+        self.stem = DUB(in_channels, in_channels, in_channels//2)
+        self.pre_conv = nn.Conv2d(in_channels*2, in_channels*2, kernel_size=1, padding=0)
+        self.prelu = nn.PReLU()
+        self.conv1x1 = nn.Conv2d(in_channels//2, in_channels//2, kernel_size=1, padding=0)
+        self.att = att_block(in_channels//2, in_channels//8)
+        self.iwt = IWT()
+        #self.up = nn.Upsample(scale_factor = 2, mode = 'bilinear', align_corners = False)
+    def forward(self, x, x_dwt):
+        stem = self.stem(x)
+        x_dwt = self.prelu(self.pre_conv(x_dwt))
+        x_iwt = self.iwt(x_dwt)
+        x_iwt = self.conv1x1(x_iwt)
+        out = stem + x_iwt
+        out = self.att(out)
+        return out
+
+class DUB(nn.Module):
+    def __init__(self, a,b,c):
+        super(DUB, self).__init__()
+        self.conv3=nn.Sequential(
+            nn.BatchNorm2d(a),
+            nn.ReLU(inplace=True),
+            DCN(a, b, kernel_size=3, stride=1,padding=1)
+        )
+        self.conv1=nn.Sequential(
+            nn.BatchNorm2d(a+b),
+            nn.ReLU(inplace=True),
+            DCN(a+b, c, kernel_size=1, stride=1, padding=0)
+        )
+
+    def forward(self, x):
+        y=self.conv3(x)
+        x=self.conv1(torch.cat([x,y],1))
+        return F.upsample_nearest(x, scale_factor=2)
+
+
 
 class GCIWTResUp(nn.Module):
 
@@ -207,42 +255,6 @@ class GCIWTResUp(nn.Module):
         out = self.att(out)
         return out
 
-
-
-# class GCIWTResUp(nn.Module):
-
-#     def __init__(self, in_channels, att_block, device='cuda:1', norm_layer=None):
-#         super().__init__()
-#         if norm_layer:
-#             self.stem = nn.Sequential(
-#                 nn.Upsample(scale_factor = 2, mode = 'bilinear', align_corners = False),
-#                 nn.Conv2d(in_channels, in_channels//2, kernel_size = 3, padding = 1),
-#                 norm_layer(in_channels//2),
-#                 nn.PReLU(),
-#                 nn.Conv2d(in_channels//2, in_channels//2, kernel_size = 3, padding = 1),
-#                 norm_layer(in_channels//2),
-#                 nn.PReLU(),
-#             )
-#         else:
-#             self.stem = nn.Sequential(
-#                 nn.Upsample(scale_factor = 2, mode = 'bilinear', align_corners = False),
-#                 nn.Conv2d(in_channels, in_channels//2, kernel_size = 3, padding = 1),
-#                 nn.PReLU(),
-#                 nn.Conv2d(in_channels//2, in_channels//2, kernel_size = 3, padding = 1),
-#                 nn.PReLU(),
-#             )
-#         self.conv1x1 = nn.Conv2d(in_channels, in_channels//2, kernel_size=1, padding=0)
-#         self.att = att_block(in_channels//2, in_channels//2)
-#         self.iwt = IWT(device)
-
-#     def forward(self, x, x_dwt):
-#         stem = self.stem(x)
-#         x_iwt = self.iwt(x_dwt)
-#         out = torch.cat([stem, x_iwt], dim=1)
-#         out = self.conv1x1(out)
-#         out = self.att(out)
-#         return out
-
 class shortcutblock(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
@@ -259,7 +271,7 @@ if __name__ == '__main__':
     x = torch.randn(1, 64, 448, 448)
     net = GCRDB(64, ContextBlock2d)
     net2 = GCWTResDown(64, ContextBlock2d)
-    net3 = GCIWTResUp(128, ContextBlock2d, 'cpu')
+    net3 = GCIWTResUp(128, ContextBlock2d)
     y = net(x)
     y = net2(y)
     y = net3(y)

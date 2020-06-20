@@ -84,11 +84,11 @@ def validation(net, val_data_loader, device, save_tag=False):
             target = target.to(device, non_blocking=True)
             y, _ = net(x)
 
-        psnr_list.extend(to_psnr(y, target))
-        ssim_list.extend(to_ssim_skimage(y, target))
+        psnr_list.extend(to_psnr(y[0], target))
+        ssim_list.extend(to_ssim_skimage(y[0], target))
         # Save image
         if save_tag:
-            save_image(target, y, image_name, save_folder)
+            save_image(target, y[0], image_name, save_folder)
 
     avr_psnr = sum(psnr_list) / len(psnr_list)
     avr_ssim = sum(ssim_list) / len(ssim_list)
@@ -108,16 +108,16 @@ def validation_teacher(net, val_data_loader, device, save_tag=False):
 
     for batch_id, val_data in enumerate(val_data_loader):
         with torch.no_grad():
-            x, target, image_name = val_data
-            x = x.to(device, non_blocking=True)
+            _, target, image_name = val_data
+            #x = x.to(device, non_blocking=True)
             target = target.to(device, non_blocking=True)
-            y = net(target)
+            y, _ = net(target)
 
-        psnr_list.extend(to_psnr(y, target))
-        ssim_list.extend(to_ssim_skimage(y, target))
+        psnr_list.extend(to_psnr(y[0], target))
+        ssim_list.extend(to_ssim_skimage(y[0], target))
         # Save image
         if save_tag:
-            save_image(target, y, image_name, save_folder)
+            save_image(target, y[0], image_name, save_folder)
 
     avr_psnr = sum(psnr_list) / len(psnr_list)
     avr_ssim = sum(ssim_list) / len(ssim_list)
@@ -163,7 +163,7 @@ def adjust_learning_rate(optimizer, scheduler, epoch, learning_rate, writer):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
 
     if epoch > 0: #and epoch < 16:
-        if epoch % 6 == 0:
+        if epoch % 2 == 0:
             learning_rate = scheduler.get_lr()[0]
             for param_group in optimizer.param_groups:
                 param_group['lr'] = learning_rate
@@ -194,3 +194,12 @@ def set_requires_grad(nets, requires_grad=False):
         if net is not None:
             for param in net.parameters():
                 param.requires_grad = requires_grad
+
+def adjust_learning_rate_step(optimizer, epoch, num_epochs, learning_rate):
+    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+    step = num_epochs // len(learning_rate)
+
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = learning_rate[epoch // step]
+        print('Learning rate sets to {}.'.format(param_group['lr']))
+    return learning_rate[epoch // step]

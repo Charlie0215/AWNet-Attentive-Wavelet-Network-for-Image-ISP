@@ -54,8 +54,68 @@ class Loss(nn.Module):
         return Loss, (perceptual_loss, l1, ssim_loss)
 
     def perceptual_loss(self, out_images, target_images):
+        
         loss = self.mse_loss(self.loss_network(out_images), self.loss_network(target_images)) / 3
         return loss
+
+    def CharbonnierLoss(self, y, target, eps=1e-6):
+        diff = y - target
+        loss = torch.mean(torch.sqrt(diff * diff + eps))
+        return loss
+
+    def tv_loss(self, x, TVLoss_weight=1):
+        def _tensor_size(t):
+            return t.size()[1]*t.size()[2]*t.size()[3]
+        batch_size = x.size()[0]
+        h_x = x.size()[2]
+        w_x = x.size()[3]
+        count_h = _tensor_size(x[:,:,1:,:])
+        count_w = _tensor_size(x[:,:,:,1:])
+        h_tv = torch.pow((x[:,:,1:,:]-x[:,:,:h_x-1,:]),2).sum()
+        w_tv = torch.pow((x[:,:,:,1:]-x[:,:,:,:w_x-1]),2).sum()
+        return TVLoss_weight*2*(h_tv/count_h+w_tv/count_w)/batch_size
+
+    
+
+
+
+class ms_Loss(Loss):
+    def __init__(self):
+        super(ms_Loss, self).__init__()
+    def forward(self, y, target):
+        loss = 0
+        total_l1 = 0
+        total_perceptual=0
+        total_ssim = 0
+        # scale 1
+        for i in range(len(y)):
+            if i == 0:
+                perceptual_loss = self.perceptual_loss(y[i], target)
+                ssim_loss = 1 - self.ssim_loss(y[i], target)
+                #l1 = F.smooth_l1_loss(y[i], target)
+                l1 = self.CharbonnierLoss(y[i], target)
+                tv_loss = self.tv_loss(y[i])
+                loss += 0.25 * perceptual_loss + 0.05 * ssim_loss + l1 + 0.1 * tv_loss
+                total_l1 += l1
+                total_perceptual += perceptual_loss
+                total_ssim += ssim_loss
+            elif i == 1 or i == 2:
+                h, w = y[i].size(2), y[i].size(3)
+                target = F.interpolate(target, size=(h, w))
+                perceptual_loss = self.perceptual_loss(y[i], target)
+                # l1 = F.smooth_l1_loss(y[i], target)
+                l1 = self.CharbonnierLoss(y[i], target)
+                total_l1 += l1
+                loss += perceptual_loss + l1 * 0.25
+                total_perceptual += perceptual_loss
+            else:
+                h, w = y[i].size(2), y[i].size(3)
+                target = F.interpolate(target, size=(h, w))
+                l1 = self.CharbonnierLoss(y[i], target)
+                total_l1 += l1
+                loss += l1
+                
+        return loss, (total_perceptual, total_l1, total_ssim, tv_loss)
 
 # laplacian loss
 def gauss_kernel(size=5, device=torch.device('cpu'), channels=3):
@@ -108,3 +168,12 @@ class LapLoss(torch.nn.Module):
         pyr_input  = laplacian_pyramid(img=input, kernel=self.gauss_kernel, max_levels=self.max_levels)
         pyr_target = laplacian_pyramid(img=target, kernel=self.gauss_kernel, max_levels=self.max_levels)
         return sum(torch.nn.functional.l1_loss(a, b) for a, b in zip(pyr_input, pyr_target))
+
+if __name__ == '__main__':
+    x1 = torch.randn(1,3,220,220)
+    x2 = torch.randn(1,3,110,110)
+    x3 = torch.randn(1,3,55,55)
+    inp = [x1, x2, x3]
+    y = torch.randn(1,3,220,220)
+    loss = ms_Loss()
+    l = loss(inp, y)
