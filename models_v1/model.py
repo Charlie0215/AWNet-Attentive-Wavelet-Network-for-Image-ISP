@@ -234,19 +234,20 @@ class teacher_decoder(nn.Module):
         self.final_conv = nn.Conv2d(64, out_channels, kernel_size=3, padding=1)
 
     def forward(self, x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent):
-        x5_out = self.scale_5(x5_latent)
+        x5_out = F.sigmoid(self.scale_5(x5_latent))
         x4_up = self.layer4_up(x5_latent, x5_dwt) + self.sc_x4(x4)
         # x4_up = self.layer4_gcrdb_up(x4_up)
-        x4_out = self.scale_4(x4_up) 
+        x4_out = F.sigmoid(self.scale_4(x4_up)) 
         x3_up = self.layer3_up(x4_up, x4_dwt) + self.sc_x3(x3)
         # x3_up = self.layer3_gcrdb(x3_up) 
-        x3_out = self.scale_3(x3_up) 
+        x3_out = F.sigmoid(self.scale_3(x3_up)) 
         x2_up = self.layer2_up(x3_up, x3_dwt) + self.sc_x2(x2)
         # x2_up = self.layer2_gcrdb(x2_up) 
-        x2_out = self.scale_2(x2_up)
+        x2_out = F.sigmoid(self.scale_2(x2_up))
         x1_up = self.layer1_up(x2_up, x2_dwt) + self.sc_x1(x1)
         # x1_up = self.layer1_gcrdb(x1_up) 
         out = self.final_conv(x1_up)
+        out = F.sigmoid(out)
         return (out, x2_out, x3_out, x4_out, x5_out), x5_latent
 
 class teacher(nn.Module):
@@ -254,9 +255,8 @@ class teacher(nn.Module):
         super().__init__()
         self.is_train = is_train
         self.path = path
-        self.pre_conv = nn.Conv2d(3, 4, kernel_size=3, padding=1)
         if self.is_train:
-            self.encoder = teacher_encoder(4)
+            self.encoder = teacher_encoder(3)
             self.decoder = teacher_decoder(3)
         else:
             self.encoder = teacher_encoder(4)
@@ -272,7 +272,6 @@ class teacher(nn.Module):
         
     def forward(self, x):
         if self.is_train:
-            x = self.pre_conv(x)
             x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent = self.encoder(x)
             (out, x2_out, x3_out, x4_out, x5_out), x5_latent = self.decoder(x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent)
             return (out, x2_out, x3_out, x4_out, x5_out), x5_latent
