@@ -66,7 +66,7 @@ def save_image(target, preds, img_name, root):
         vutils.save_image(preds[ind], root + '{}'.format(img_name[ind].split('.png')[0] + '_pred.png'))
 
 
-def validation(net, val_data_loader, device, save_tag=False):
+def validation(net, val_data_loader, device, save_tag=False, mode='student'):
     psnr_list = []
     ssim_list = []
     mse_list = []
@@ -82,18 +82,27 @@ def validation(net, val_data_loader, device, save_tag=False):
             x, target, image_name = val_data
             x = x.to(device, non_blocking=True)
             target = target.to(device, non_blocking=True)
-            y, _ = net(x)
+            if mode == 'student' or mode == 'teacher':
+                y, _ = net(x)
+                psnr_list.extend(to_psnr(y[0], target))
+                ssim_list.extend(to_ssim_skimage(y[0], target))
+            elif mode == 'texture':
+                y = net(x)
+                psnr_list.extend(to_psnr(y, target))
+                ssim_list.extend(to_ssim_skimage(y, target))
 
-        psnr_list.extend(to_psnr(y[0], target))
-        ssim_list.extend(to_ssim_skimage(y[0], target))
         # Save image
         if save_tag:
-            save_image(target, y[0], image_name, save_folder)
+            if mode == 'student' or mode == 'teacher':
+                save_image(target, y[0], image_name, save_folder)
+            elif mode == 'texture':
+                save_image(target, y, image_name, save_folder)
 
     avr_psnr = sum(psnr_list) / len(psnr_list)
     avr_ssim = sum(ssim_list) / len(ssim_list)
 
     return avr_psnr, avr_ssim
+
 
 def validation_teacher(net, val_data_loader, device, save_tag=False):
     psnr_list = []
