@@ -82,20 +82,24 @@ class Loss(nn.Module):
 class ms_Loss(Loss):
     def __init__(self):
         super(ms_Loss, self).__init__()
-    def forward(self, y, target):
+    def forward(self, y, target, texture_img=None):
         loss = 0
         total_l1 = 0
         total_perceptual=0
         total_ssim = 0
         # scale 1
+        if texture_img:
+            l1 = self.CharbonnierLoss(texture_img, target) * 0.25
+            total_l1 += l1
+            loss += l1
         for i in range(len(y)):
             if i == 0:
                 perceptual_loss = self.perceptual_loss(y[i], target)
                 ssim_loss = 1 - self.ssim_loss(y[i], target)
                 #l1 = F.smooth_l1_loss(y[i], target)
                 l1 = self.CharbonnierLoss(y[i], target)
-                tv_loss = self.tv_loss(y[i])
-                loss += 0.25 * perceptual_loss + 0.05 * ssim_loss + l1 + 0.1 * tv_loss
+                #tv_loss = self.tv_loss(y[i])
+                loss +=  0.05 * ssim_loss + l1 + 0.25 * perceptual_loss#+ 0.1 * tv_loss  +
                 total_l1 += l1
                 total_perceptual += perceptual_loss
                 total_ssim += ssim_loss
@@ -103,7 +107,7 @@ class ms_Loss(Loss):
                 h, w = y[i].size(2), y[i].size(3)
                 target = F.interpolate(target, size=(h, w))
                 perceptual_loss = self.perceptual_loss(y[i], target)
-                # l1 = F.smooth_l1_loss(y[i], target)
+                l1 = F.smooth_l1_loss(y[i], target)
                 l1 = self.CharbonnierLoss(y[i], target)
                 total_l1 += l1
                 loss += perceptual_loss + l1 * 0.25
@@ -114,8 +118,9 @@ class ms_Loss(Loss):
                 l1 = self.CharbonnierLoss(y[i], target)
                 total_l1 += l1
                 loss += l1
-                
-        return loss, (total_perceptual, total_l1, total_ssim, tv_loss)
+        
+        # return loss, (total_perceptual, total_l1, total_ssim, 0)
+        return loss, (total_perceptual, total_l1, total_ssim)
 
 # laplacian loss
 def gauss_kernel(size=5, device=torch.device('cpu'), channels=3):

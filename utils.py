@@ -66,7 +66,7 @@ def save_image(target, preds, img_name, root):
         vutils.save_image(preds[ind], root + '{}'.format(img_name[ind].split('.png')[0] + '_pred.png'))
 
 
-def validation(net, val_data_loader, device, save_tag=False, mode='student'):
+def validation(net, val_data_loader, device, texture_net=None, save_tag=False, mode='student'):
     psnr_list = []
     ssim_list = []
     mse_list = []
@@ -83,9 +83,13 @@ def validation(net, val_data_loader, device, save_tag=False, mode='student'):
             x = x.to(device, non_blocking=True)
             target = target.to(device, non_blocking=True)
             if mode == 'student' or mode == 'teacher':
-                y, _ = net(x)
-                psnr_list.extend(to_psnr(y[0], target))
-                ssim_list.extend(to_ssim_skimage(y[0], target))
+                if texture_net:
+                    x = texture_net(x)
+                    y, _ = net(x)
+                else:
+                    y, _ = net(x)
+                    psnr_list.extend(to_psnr(y[0], target))
+                    ssim_list.extend(to_ssim_skimage(y[0], target))
             elif mode == 'texture':
                 y = net(x)
                 psnr_list.extend(to_psnr(y, target))

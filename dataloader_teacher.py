@@ -1,6 +1,7 @@
 # Copyright 2020 by Andrey Ignatov. All Rights Reserved.
 
 from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
 from torchvision import transforms
 from scipy import misc
 import numpy as np
