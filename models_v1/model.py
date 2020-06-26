@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from models_v1.utils import DWT, IWT
-from models_v1.modules import shortcutblock, GCIWTResUp, GCWTResDown, GCRDB, ContextBlock2d, GCIWTResUp_deform, SE_net
+from models_v1.modules import shortcutblock, GCIWTResUp, GCWTResDown, GCRDB, ContextBlock2d, GCIWTResUp_deform, SE_net, PSPModule
 import functools
 try:
     import sys
@@ -10,13 +10,14 @@ try:
     from dcn_v2 import DCN
 except ImportError:
     raise ImportError('Failed to import DCNv2 module.')
+# from loss import ms_Loss
 
 class Generator(nn.Module):
     def __init__(self, in_channels, out_channels, block=[2,2,2,3,4]):
         super().__init__()
         
-        # self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
-        self.conv1 = DCN(in_channels, 64, kernel_size=3, stride=1,padding=1)
+        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
+        # self.conv1 = DCN(in_channels, 64, kernel_size=3, stride=1,padding=1)
         
         #layer1
         _layer_1_dw = []
@@ -99,7 +100,9 @@ class Generator(nn.Module):
         self.se4 = SE_net(512, 512)
         self.se5 = SE_net(1024, 1024)
 
-    def forward(self, x):
+        # self.enhance = PSPModule(features=64, out_features=64, sizes=(1, 2, 3, 6))        
+
+    def forward(self, x, target=None, teacher_latent=None):
         x1 = self.conv1(x)
         # x2, x2_dwt = self.layer1(x1)
         # x3, x3_dwt = self.layer2(x2)
@@ -114,17 +117,25 @@ class Generator(nn.Module):
         x5_out = self.scale_5(x5_latent)
         x4_up = self.layer4_up(x5_latent, x5_dwt) + self.sc_x4(x4)
         # x4_up = self.layer4_gcrdb_up(x4_up)
-        x4_out = self.scale_4(x4_up) 
+        x4_out = self.scale_4(x4_up)
         x3_up = self.layer3_up(x4_up, x4_dwt) + self.sc_x3(x3)
         # x3_up = self.layer3_gcrdb(x3_up) 
-        x3_out = self.scale_3(x3_up) 
+        x3_out = self.scale_3(x3_up)
         x2_up = self.layer2_up(x3_up, x3_dwt) + self.sc_x2(x2)
         # x2_up = self.layer2_gcrdb(x2_up) 
         x2_out = self.scale_2(x2_up)
         x1_up = self.layer1_up(x2_up, x2_dwt) + self.sc_x1(x1)
         # x1_up = self.layer1_gcrdb(x1_up) 
+        # x1_up = self.enhance(x1_up)
         out = self.final_conv(x1_up)
-        return (out, x2_out, x3_out, x4_out, x5_out), x5_latent
+        # if target is not None:
+        #     pred = (out, x2_out, x3_out, x4_out, x5_out)
+        #     total_loss, losses = loss(pred, target)
+        #     if teacher_latent is not None:
+        #         total_loss += F.l1_loss(x5_latent, teacher_latent)
+        #         return total_loss, losses
+        #     else: return total_loss, losses
+        return (out, x2_out, x3_out, x4_out, x5_out) , x5_latent
 
 
 class teacher_encoder(nn.Module):
@@ -234,20 +245,19 @@ class teacher_decoder(nn.Module):
         self.final_conv = nn.Conv2d(64, out_channels, kernel_size=3, padding=1)
 
     def forward(self, x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent):
-        x5_out = F.sigmoid(self.scale_5(x5_latent))
+        x5_out = self.scale_5(x5_latent)
         x4_up = self.layer4_up(x5_latent, x5_dwt) + self.sc_x4(x4)
         # x4_up = self.layer4_gcrdb_up(x4_up)
-        x4_out = F.sigmoid(self.scale_4(x4_up)) 
+        x4_out = self.scale_4(x4_up)
         x3_up = self.layer3_up(x4_up, x4_dwt) + self.sc_x3(x3)
         # x3_up = self.layer3_gcrdb(x3_up) 
-        x3_out = F.sigmoid(self.scale_3(x3_up)) 
+        x3_out = self.scale_3(x3_up)
         x2_up = self.layer2_up(x3_up, x3_dwt) + self.sc_x2(x2)
         # x2_up = self.layer2_gcrdb(x2_up) 
-        x2_out = F.sigmoid(self.scale_2(x2_up))
+        x2_out = self.scale_2(x2_up)
         x1_up = self.layer1_up(x2_up, x2_dwt) + self.sc_x1(x1)
         # x1_up = self.layer1_gcrdb(x1_up) 
         out = self.final_conv(x1_up)
-        out = F.sigmoid(out)
         return (out, x2_out, x3_out, x4_out, x5_out), x5_latent
 
 class teacher(nn.Module):
@@ -259,8 +269,8 @@ class teacher(nn.Module):
             self.encoder = teacher_encoder(3)
             self.decoder = teacher_decoder(3)
         else:
-            self.encoder = teacher_encoder(4)
-            self.encoder.load_state_dict(torch.load('./weight/best_teacher.pkl')["model_state"])
+            self.encoder = teacher_encoder(3)
+            self.encoder.load_state_dict(torch.load('{}/teacher_best.pkl'.format(path))["model_state"])
             for param in self.encoder.parameters():
                 param.requires_grad = False
     
@@ -276,8 +286,8 @@ class teacher(nn.Module):
             (out, x2_out, x3_out, x4_out, x5_out), x5_latent = self.decoder(x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent)
             return (out, x2_out, x3_out, x4_out, x5_out), x5_latent
         else:
-            (out, x2_out, x3_out, x4_out, x5_out), x5_latent = self.encoder(x)
-            return (out, x2_out, x3_out, x4_out, x5_out), x5_latent
+            x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent = self.encoder(x)
+            return x5_latent
 
         
 

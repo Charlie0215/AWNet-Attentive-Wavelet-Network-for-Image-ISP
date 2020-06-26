@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 import torch.optim.lr_scheduler as lr_scheduler
-# from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader
 
 import os
 import time
@@ -14,9 +14,9 @@ from tensorboardX import SummaryWriter
 import numpy as np
 import shutil
 
-from models_v1.model import Generator#, PixelDiscriminator
+from models_v1.model import Generator, teacher#, PixelDiscriminator
 from loss import ms_Loss
-from dataloader1 import LoadData, LoadVisualData, DataLoaderX
+from dataloader import LoadData, LoadVisualData
 from config import trainConfig
 from utils import validation, adjust_learning_rate, writer_add_image, print_log, to_psnr, poly_learning_decay, adjust_learning_rate_step
 
@@ -26,15 +26,14 @@ torch.manual_seed(0)
 # Dataset size
 TRAIN_SIZE = 46839
 TEST_SIZE = 1204
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
+
 def train():
-    log_path = './runs_student'
+    log_path = './runs_teacher'
     if os.path.isdir(log_path):
         shutil.rmtree(log_path)
     writer = SummaryWriter(log_path)
     if torch.cuda.device_count() > 0:
-        device_ids = [1, 0]
+        device_ids = [1,0]
         print('using device: {}'.format(device_ids))
     else: device_ids = [1]
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
@@ -43,8 +42,12 @@ def train():
 
     # Initialize loss and model
     loss = ms_Loss().to(device)
-    net = Generator(3,3, block=[2,2,2,3,4]).to(device)
+    net = Generator(4,3).to(device)
     net = nn.DataParallel(net, device_ids=device_ids)
+    teacher_net = teacher(trainConfig.save_best, is_train=False).to(device)
+    teacher_net = nn.DataParallel(teacher_net, device_ids=device_ids)
+
+
     new_lr = trainConfig.learning_rate[0]
     # Reload
     if trainConfig.pretrain == True:
@@ -63,15 +66,15 @@ def train():
 
     # optimizer and scheduler
     optimizer = torch.optim.Adam(net.parameters(), lr=new_lr, betas=(0.9, 0.999))
-
+    scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 
     # Dataloaders
     train_dataset = LoadData(trainConfig.data_dir, TRAIN_SIZE, dslr_scale=2, test=False)
-    train_loader = DataLoaderX(dataset=train_dataset, batch_size=trainConfig.batch_size, shuffle=True, num_workers=32,
+    train_loader = DataLoader(dataset=train_dataset, batch_size=trainConfig.batch_size, shuffle=True, num_workers=24,
                               pin_memory=True, drop_last=True)
 
     test_dataset = LoadData(trainConfig.data_dir, TEST_SIZE, dslr_scale=2, test=True)
-    test_loader = DataLoaderX(dataset=test_dataset, batch_size=6, shuffle=False, num_workers=18,
+    test_loader = DataLoader(dataset=test_dataset, batch_size=6, shuffle=False, num_workers=18,
                              pin_memory=True, drop_last=False)
 
     # visual_dataset = LoadVisualData(trainConfig.data_dir, 10, scale=2, level=0)
@@ -90,16 +93,22 @@ def train():
         start_time = time.time() 
         # new_lr = adjust_learning_rate(optimizer, epoch, trainConfig.epoch, trainConfig.learning_rate)
         if epoch > 0:
-            new_lr = adjust_learning_rate_step(optimizer, epoch, trainConfig.epoch, trainConfig.learning_rate)  
+        #     new_lr = adjust_learning_rate(optimizer, scheduler, epoch, trainConfig.learning_rate, writer)  
+            new_lr = adjust_learning_rate_step(optimizer, epoch, trainConfig.epoch, trainConfig.learning_rate)
+
         for batch_id, data in enumerate(train_loader):
             x, target, _ = data
             x = x.to(device)
             target = target.to(device)
-            pred, _ = net(x)
+            latent = teacher_net(target)
+            pred, latent_pred = net(x)
+
             
             optimizer.zero_grad()
 
             total_loss, losses = loss(pred, target)
+            latent_loss = F.l1_loss(latent_pred, latent)
+            total_loss += latent_loss
             total_loss.backward()
             optimizer.step()
 
@@ -111,9 +120,10 @@ def train():
 
             writer.add_scalars('data/train_loss_group',
                                {'g_loss': total_loss.item(),
-                                'perceptual_loss': losses[0].item(),
-                                'l1': losses[1].item(),
-                                'ssim': losses[2].item(),
+                                # 'perceptual_loss': losses[0].item(),
+                                'l1': losses[0].item(),
+                                'ssim': losses[1].item(),
+                                'latent': latent_loss.item(),
                                 # 'tv': losses[3].item(),
                                 }, iteration)
 
@@ -130,7 +140,7 @@ def train():
                 "lr": new_lr,
             }
         print('saved checkpoint')
-        torch.save(state, '{}/student_ns_epoch_{}.pkl'.format(trainConfig.checkpoints, epoch))
+        torch.save(state, '{}/student_epoch_{}.pkl'.format(trainConfig.checkpoints, epoch))
         
         one_epoch_time = time.time() - start_time
         print('time: {}, train psnr: {}'.format(one_epoch_time, train_psnr))
@@ -149,7 +159,7 @@ def train():
             }
 
             print('saved best weight')
-            torch.save(state, '{}/student_ns_best.pkl'.format(trainConfig.save_best))
+            torch.save(state, '{}/student_best.pkl'.format(trainConfig.save_best))
             pre_psnr = val_psnr
 
 if __name__ == '__main__':

@@ -37,11 +37,11 @@ class LoadData(Dataset):
     def __init__(self, dataset_dir, dataset_size, dslr_scale, test=False):
 
         if test:
-            self.raw_dir = os.path.join(dataset_dir, 'test', 'huawei_raw')
+            self.raw_dir = os.path.join(dataset_dir, 'test', 'train_vis')
             self.dslr_dir = os.path.join(dataset_dir, 'test', 'canon')
             self.dataset_size = dataset_size
         else:
-            self.raw_dir = os.path.join(dataset_dir, 'train', 'huawei_raw')
+            self.raw_dir = os.path.join(dataset_dir, 'train', 'train_vis')
             self.dslr_dir = os.path.join(dataset_dir, 'train', 'canon')
 
         self.dataset_size = dataset_size
@@ -53,12 +53,16 @@ class LoadData(Dataset):
 
     def __getitem__(self, idx):
 
-        raw_image = np.asarray(imageio.imread(os.path.join(self.raw_dir, str(idx) + '.png')))
-        raw_image = extract_bayer_channels(raw_image)
+        raw_image = imageio.imread(os.path.join(self.raw_dir, str(idx) + ".png"))
+        raw_image = np.asarray(raw_image)
+        raw_image_shape = raw_image.shape
+        raw_image = np.float32(
+            np.array(Image.fromarray(raw_image).resize((raw_image_shape[0]//self.scale, raw_image_shape[1]//self.scale)))) / 255.0
         raw_image = torch.from_numpy(raw_image.transpose((2, 0, 1)))
 
         dslr_image = imageio.imread(os.path.join(self.dslr_dir, str(idx) + ".jpg"))
         dslr_image = np.asarray(dslr_image)
+        # dslr_img_shape = dslr_image.shape
         dslr_img_shape = dslr_image.shape
         dslr_image = np.float32(
             np.array(Image.fromarray(dslr_image).resize((dslr_img_shape[0]//self.scale, dslr_img_shape[1]//self.scale)))) / 255.0
