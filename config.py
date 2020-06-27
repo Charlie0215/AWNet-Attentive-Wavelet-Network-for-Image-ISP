@@ -5,7 +5,7 @@ class trainConfig:
     print_loss = False
     # pre_lr = 0.0001
 
-    batch_size = 12
+    batch_size = 8
     epoch = 50
     pretrain = False
 

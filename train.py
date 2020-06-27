@@ -43,7 +43,7 @@ def train():
 
     # Initialize loss and model
     loss = ms_Loss().to(device)
-    net = Generator(3,3, block=[2,2,2,3,4]).to(device)
+    net = Generator(3,3, block=[3,3,3,4,4]).to(device)
     net = nn.DataParallel(net, device_ids=device_ids)
     new_lr = trainConfig.learning_rate[0]
     # Reload
