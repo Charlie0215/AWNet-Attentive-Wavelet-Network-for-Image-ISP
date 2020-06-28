@@ -163,8 +163,8 @@ class transform_matrix(nn.Module):
 class teacher_encoder(nn.Module):
     def __init__(self, in_channels, block=[2,2,2,3,4]):
         super().__init__()
-         # self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
-        self.conv1 = DCN(in_channels, 64, kernel_size=3, stride=1,padding=1)
+         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
+        # self.conv1 = DCN(in_channels, 64, kernel_size=3, stride=1,padding=1)
         
         #layer1
         _layer_1_dw = []
@@ -263,7 +263,7 @@ class teacher_decoder(nn.Module):
         self.scale_4 = nn.Conv2d(512, out_channels, kernel_size=3, padding=1)
         self.scale_3 = nn.Conv2d(256, out_channels, kernel_size=3, padding=1)
         self.scale_2 = nn.Conv2d(128, out_channels, kernel_size=3, padding=1)
-        
+        self.enhance = PSPModule(features=64, out_features=64, sizes=(1, 2, 3, 6)) 
         self.final_conv = nn.Conv2d(64, out_channels, kernel_size=3, padding=1)
 
     def forward(self, x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent):
@@ -279,6 +279,7 @@ class teacher_decoder(nn.Module):
         x2_out = self.scale_2(x2_up)
         x1_up = self.layer1_up(x2_up, x2_dwt) + self.sc_x1(x1)
         # x1_up = self.layer1_gcrdb(x1_up) 
+        x1_up = self.enhance(x1_up)
         out = self.final_conv(x1_up)
         return (out, x2_out, x3_out, x4_out, x5_out), x5_latent
 
