@@ -163,7 +163,7 @@ class transform_matrix(nn.Module):
 class teacher_encoder(nn.Module):
     def __init__(self, in_channels, block=[2,2,2,3,4]):
         super().__init__()
-         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
         # self.conv1 = DCN(in_channels, 64, kernel_size=3, stride=1,padding=1)
         
         #layer1
@@ -284,15 +284,15 @@ class teacher_decoder(nn.Module):
         return (out, x2_out, x3_out, x4_out, x5_out), x5_latent
 
 class teacher(nn.Module):
-    def __init__(self, path, is_train):
+    def __init__(self, path, is_train, block=[2,2,2,3,4]):
         super().__init__()
         self.is_train = is_train
         self.path = path
         if self.is_train:
-            self.encoder = teacher_encoder(3)
+            self.encoder = teacher_encoder(3, block=[2,2,2,3,4])
             self.decoder = teacher_decoder(3)
         else:
-            self.encoder = teacher_encoder(3)
+            self.encoder = teacher_encoder(3, block=[2,2,2,3,4])
             self.encoder.load_state_dict(torch.load('{}/teacher_best.pkl'.format(path))["model_state"])
             for param in self.encoder.parameters():
                 param.requires_grad = False
