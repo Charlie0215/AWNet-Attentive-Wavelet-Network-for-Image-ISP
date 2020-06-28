@@ -142,6 +142,23 @@ class Generator(nn.Module):
         #     else: return total_loss, losses
         return (out, x2_out, x3_out, x4_out, x5_out) , x5_latent
 
+class transform_matrix(nn.Module):
+    def __init__(self, C, H, W):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1)
+        self.head = GCRDB(64, ContextBlock2d)
+        self.r = nn.Conv2d(64, 3, kernel_size=3, padding=1)
+        self.g = nn.Conv2d(64, 3, kernel_size=3, padding=1)
+        self.b = nn.Conv2d(64, 3, kernel_size=3, padding=1)
+        # self.matrix = Parameter(torch.Tensor(3, C, H, W))
+    def forward(self, x, dark):
+        out = self.head(self.conv1(x))
+        out_r = self.r(out)
+        out_g = self.g(out)
+        out_b = self.b(out)
+        matrix = torch.stack((out_r, out_b, out_g), dim=1)
+        print(matrix.shape, dark.shape)
+        return torch.einsum('abcd, abecd -> aecd', dark, matrix)
 
 class teacher_encoder(nn.Module):
     def __init__(self, in_channels, block=[2,2,2,3,4]):
