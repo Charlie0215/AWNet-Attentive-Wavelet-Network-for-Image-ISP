@@ -100,7 +100,7 @@ class Generator(nn.Module):
         self.se4 = SE_net(512, 512)
         self.se5 = SE_net(1024, 1024)
 
-        # self.enhance = PSPModule(features=64, out_features=64, sizes=(1, 2, 3, 6))        
+        self.enhance = PSPModule(features=64, out_features=64, sizes=(1, 2, 3, 6))        
 
     def forward(self, x, target=None, teacher_latent=None):
         x1 = self.conv1(x)
@@ -115,19 +115,24 @@ class Generator(nn.Module):
         x5, x5_dwt = self.layer4(self.se4(x4))
         x5_latent = self.layer5(self.se5(x5))
         x5_out = self.scale_5(x5_latent)
+        x5_out = F.sigmoid(x5_out)
         x4_up = self.layer4_up(x5_latent, x5_dwt) + self.sc_x4(x4)
         # x4_up = self.layer4_gcrdb_up(x4_up)
         x4_out = self.scale_4(x4_up)
+        x4_out = F.sigmoid(x4_out)
         x3_up = self.layer3_up(x4_up, x4_dwt) + self.sc_x3(x3)
         # x3_up = self.layer3_gcrdb(x3_up) 
         x3_out = self.scale_3(x3_up)
+        x3_out = F.sigmoid(x3_out)
         x2_up = self.layer2_up(x3_up, x3_dwt) + self.sc_x2(x2)
         # x2_up = self.layer2_gcrdb(x2_up) 
         x2_out = self.scale_2(x2_up)
+        x2_out = F.sigmoid(x2_out)
         x1_up = self.layer1_up(x2_up, x2_dwt) + self.sc_x1(x1)
         # x1_up = self.layer1_gcrdb(x1_up) 
-        # x1_up = self.enhance(x1_up)
+        x1_up = self.enhance(x1_up)
         out = self.final_conv(x1_up)
+        out = F.sigmoid(out)
         # if target is not None:
         #     pred = (out, x2_out, x3_out, x4_out, x5_out)
         #     total_loss, losses = loss(pred, target)
@@ -137,12 +142,29 @@ class Generator(nn.Module):
         #     else: return total_loss, losses
         return (out, x2_out, x3_out, x4_out, x5_out) , x5_latent
 
+class transform_matrix(nn.Module):
+    def __init__(self, C, H, W):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1)
+        self.head = GCRDB(64, ContextBlock2d)
+        self.r = nn.Conv2d(64, 3, kernel_size=3, padding=1)
+        self.g = nn.Conv2d(64, 3, kernel_size=3, padding=1)
+        self.b = nn.Conv2d(64, 3, kernel_size=3, padding=1)
+        # self.matrix = Parameter(torch.Tensor(3, C, H, W))
+    def forward(self, x, dark):
+        out = self.head(self.conv1(x))
+        out_r = self.r(out)
+        out_g = self.g(out)
+        out_b = self.b(out)
+        matrix = torch.stack((out_r, out_b, out_g), dim=1)
+        print(matrix.shape, dark.shape)
+        return torch.einsum('abcd, abecd -> aecd', dark, matrix)
 
 class teacher_encoder(nn.Module):
     def __init__(self, in_channels, block=[2,2,2,3,4]):
         super().__init__()
-         # self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
-        self.conv1 = DCN(in_channels, 64, kernel_size=3, stride=1,padding=1)
+        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
+        # self.conv1 = DCN(in_channels, 64, kernel_size=3, stride=1,padding=1)
         
         #layer1
         _layer_1_dw = []
@@ -241,7 +263,7 @@ class teacher_decoder(nn.Module):
         self.scale_4 = nn.Conv2d(512, out_channels, kernel_size=3, padding=1)
         self.scale_3 = nn.Conv2d(256, out_channels, kernel_size=3, padding=1)
         self.scale_2 = nn.Conv2d(128, out_channels, kernel_size=3, padding=1)
-        
+        self.enhance = PSPModule(features=64, out_features=64, sizes=(1, 2, 3, 6)) 
         self.final_conv = nn.Conv2d(64, out_channels, kernel_size=3, padding=1)
 
     def forward(self, x1, x2, x2_dwt, x3, x3_dwt, x4, x4_dwt, x5, x5_dwt, x5_latent):
@@ -257,19 +279,20 @@ class teacher_decoder(nn.Module):
         x2_out = self.scale_2(x2_up)
         x1_up = self.layer1_up(x2_up, x2_dwt) + self.sc_x1(x1)
         # x1_up = self.layer1_gcrdb(x1_up) 
+        x1_up = self.enhance(x1_up)
         out = self.final_conv(x1_up)
         return (out, x2_out, x3_out, x4_out, x5_out), x5_latent
 
 class teacher(nn.Module):
-    def __init__(self, path, is_train):
+    def __init__(self, path, is_train, block=[2,2,2,3,4]):
         super().__init__()
         self.is_train = is_train
         self.path = path
         if self.is_train:
-            self.encoder = teacher_encoder(3)
+            self.encoder = teacher_encoder(3, block=[2,2,2,3,4])
             self.decoder = teacher_decoder(3)
         else:
-            self.encoder = teacher_encoder(3)
+            self.encoder = teacher_encoder(3, block=[2,2,2,3,4])
             self.encoder.load_state_dict(torch.load('{}/teacher_best.pkl'.format(path))["model_state"])
             for param in self.encoder.parameters():
                 param.requires_grad = False

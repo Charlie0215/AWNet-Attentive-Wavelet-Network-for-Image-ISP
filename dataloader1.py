@@ -37,7 +37,7 @@ class LoadData(Dataset):
     def __init__(self, dataset_dir, dataset_size, dslr_scale, test=False):
 
         if test:
-            self.raw_dir = os.path.join(dataset_dir, 'test', 'train_vis')
+            self.raw_dir = os.path.join(dataset_dir, 'test', 'test_vis')
             self.dslr_dir = os.path.join(dataset_dir, 'test', 'canon')
             self.dataset_size = dataset_size
         else:
@@ -45,30 +45,49 @@ class LoadData(Dataset):
             self.dslr_dir = os.path.join(dataset_dir, 'train', 'canon')
 
         self.dataset_size = dataset_size
-        self.scale = dslr_scale
+        self.scale = 224#dslr_scale
         self.test = test
+
+        self.tf1 = transforms.Compose(
+            [
+                transforms.Resize((self.scale, self.scale)),
+                transforms.RandomVerticalFlip(p=1), 
+            ]
+        )
+        self.tf2 = transforms.Compose(
+            [
+                transforms.Resize((self.scale, self.scale)),
+                transforms.RandomHorizontalFlip(p=1), 
+            ]
+        )
+        self.tf3 = transforms.Compose(
+            [
+                transforms.Resize((self.scale, self.scale)),
+            ]
+        )
+        self.toTensor = transforms.Compose([transforms.ToTensor()])
 
     def __len__(self):
         return self.dataset_size
 
     def __getitem__(self, idx):
+        raw_image = Image.open(os.path.join(self.raw_dir, str(idx) + ".png"))
+        dslr_image = Image.open(os.path.join(self.dslr_dir, str(idx) + ".jpg"))
 
-        raw_image = imageio.imread(os.path.join(self.raw_dir, str(idx) + ".png"))
-        raw_image = np.asarray(raw_image)
-        raw_image_shape = raw_image.shape
-        raw_image = np.float32(
-            np.array(Image.fromarray(raw_image).resize((raw_image_shape[0]//self.scale, raw_image_shape[1]//self.scale)))) / 255.0
-        raw_image = torch.from_numpy(raw_image.transpose((2, 0, 1)))
+        p = random.randint(0, 2)
+        if p == 1:
+            raw_image = self.tf1(raw_image)
+            dslr_image = self.tf1(dslr_image)
+        elif p == 2:
+            raw_image = self.tf2(raw_image)
+            dslr_image = self.tf2(dslr_image)
+        else:
+            raw_image = self.tf3(raw_image)
+            dslr_image = self.tf3(dslr_image)
 
-        dslr_image = imageio.imread(os.path.join(self.dslr_dir, str(idx) + ".jpg"))
-        dslr_image = np.asarray(dslr_image)
-        # dslr_img_shape = dslr_image.shape
-        dslr_img_shape = dslr_image.shape
-        dslr_image = np.float32(
-            np.array(Image.fromarray(dslr_image).resize((dslr_img_shape[0]//self.scale, dslr_img_shape[1]//self.scale)))) / 255.0
-        # dslr_image = np.float32(misc.imresize(dslr_image, self.scale / 2.0)) / 255.0
-        dslr_image = torch.from_numpy(dslr_image.transpose((2, 0, 1)))
-        # print(dslr_image.shape, raw_image.shape)
+        raw_image = self.toTensor(raw_image).float()
+        dslr_image = self.toTensor(dslr_image)
+
         return raw_image, dslr_image, str(idx)
 
 class DataLoaderX(DataLoader):
