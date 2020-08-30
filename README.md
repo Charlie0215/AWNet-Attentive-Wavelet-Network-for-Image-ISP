@@ -32,7 +32,9 @@ Full resolution:
 <img alt="" src="/images/qualitative.png" style="display: inline-block;" />
 
 Compare with other state-of-the-arts:
+<div style="text-align: center">
 <img alt="" src="/images/qualitative2.png" style="display: inline-block;" />
+</div>
 
 ## Acknowledgement
 We thank the authors of [MWCNN](https://github.com/lpj0/MWCNN.git), [GCNet](https://github.com/xvjiarui/GCNet.git), and [Pytorch_SSIM](https://github.com/Po-Hsun-Su/pytorch-ssim). Part of our code is built upon their modules.
