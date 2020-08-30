@@ -27,9 +27,9 @@ Then, move the resulting folder of demosaicing images under your root dataset di
     python demosaic.py -data <directory contains your raw images> -save <directory to save your pseudo-demosaicing images>
 ```
 Then, move the resulting folder of demosaicing images under your root dataset directory.
-Please make sure your dataset structure is the same as what we show in the <em>Training/Validation Dataset Strcuture</em> section.
-2. To reproduce our final results from testing board, run ```python validation_final.py```
-3. To reporduce our full resolution result, run ```python validation_final_fullres.py```.
+Please make sure your dataset structure is the same as what we show in the <em>Training/Validation Dataset Strcuture</em> section.  
+2. To reproduce our final results from testing board, run ```python validation_final.py```.  
+3. To reporduce our full resolution result, run ```python validation_final_fullres.py```.  
 
 ## Qualitative Results
 Full resolution:  
