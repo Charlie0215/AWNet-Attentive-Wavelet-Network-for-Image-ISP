@@ -125,7 +125,7 @@ def train():
             }
 
             print('saved best weight')
-            torch.save(state, '{}/best_3channel.pkl'.format(
+            torch.save(state, '{}/weight_3channel_best.pkl'.format(
                 trainConfig.save_best))
             pre_psnr = val_psnr
 
