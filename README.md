@@ -9,8 +9,9 @@ As the revolutionary improvement being made on the performance of smartphones ov
 [![Watch the video](https://img.youtube.com/vi/HlrzVFMUwCQ/0.jpg)](https://youtu.be/HlrzVFMUwCQ)
 
 ## Pretrained Models & Dataset
-Download [demosaiced_model](https://drive.google.com/file/d/1RVUHN4GBs-hHpDvdFc4qEy9oGWkHcy3W/view?usp=sharing) and [Raw_model](https://drive.google.com/file/d/1ejXaneEKczHmIRDbesq5V1ExAzTK1Et-/view?usp=sharing) and place into the folder ```./best_weight```.  
-Download the ZRR dataset from [here](https://competitions.codalab.org/competitions/24718)
+1. Download [demosaiced_model](https://drive.google.com/file/d/1RVUHN4GBs-hHpDvdFc4qEy9oGWkHcy3W/view?usp=sharing) and [Raw_model](https://drive.google.com/file/d/1ejXaneEKczHmIRDbesq5V1ExAzTK1Et-/view?usp=sharing) and place into the folder ```./best_weight```.  
+2. Download the ZRR dataset from [here](https://competitions.codalab.org/competitions/24718)  
+If you want to reproduce our result for the AIM 2020 challenge, please follow the steps in ```old_version``` branch. The model in ```master``` has been modified to match the architecture decribed in our paper.
 
 ## Training
 1. Generate pseudo-demosicing images for 3-channel-input model.
