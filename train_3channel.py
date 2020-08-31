@@ -35,7 +35,7 @@ def train():
     if trainConfig.pretrain == True:
         net.load_state_dict(
             torch.load(
-                '{}/weight_3channel_best.pkl'.format(trainConfig.save_best),
+                '{}/best_3channel.pkl'.format(trainConfig.save_best),
                 map_location=device)["model_state"])
         print('weight loaded.')
     else:

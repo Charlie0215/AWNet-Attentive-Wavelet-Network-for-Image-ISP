@@ -35,7 +35,7 @@ def train():
     if trainConfig.pretrain == True:
         net.load_state_dict(
             torch.load(
-                '{}/weight_4channel_best.pkl'.format(trainConfig.save_best),
+                '{}/best_4channel.pkl'.format(trainConfig.save_best),
                 map_location=device)["model_state"])
         print('weight loaded.')
     else:
@@ -125,7 +125,7 @@ def train():
             }
 
             print('saved best weight')
-            torch.save(state, '{}/best_3channel.pkl'.format(
+            torch.save(state, '{}/best_4channel.pkl'.format(
                 trainConfig.save_best))
             pre_psnr = val_psnr
 

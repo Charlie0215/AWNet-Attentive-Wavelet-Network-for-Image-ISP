@@ -147,25 +147,25 @@ class GCWTResDown(nn.Module):
         if norm_layer:
             self.stem = nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=1),
                                       norm_layer(in_channels),
-                                      nn.ReLU(),
+                                      nn.PReLU(),
                                       nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
                                       norm_layer(in_channels),
-                                      nn.ReLU())
+                                      nn.PReLU())
         else:
             self.stem = nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=1),
-                                      nn.ReLU(),
+                                      nn.PReLU(),
                                       nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
-                                      nn.ReLU())
+                                      nn.PReLU())
         self.conv1x1 = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
         self.conv_down = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, stride=2)
-        self.att = att_block(in_channels * 2, in_channels * 2)
+        #self.att = att_block(in_channels * 2, in_channels * 2)
 
     def forward(self, x):
         stem = self.stem(x)
         xLL, dwt = self.dwt(x)
         res = self.conv1x1(xLL)
         out = torch.cat([stem, res], dim=1)
-        out = self.att(out)
+        #out = self.att(out)
         return out, dwt
 
 
@@ -193,10 +193,11 @@ class GCIWTResUp(nn.Module):
             )
         self.pre_conv_stem = nn.Conv2d(in_channels // 2, in_channels, kernel_size=1, padding=0)
         self.pre_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
-        self.prelu = nn.PReLU()
+        # self.prelu = nn.PReLU()
         self.post_conv = nn.Conv2d(in_channels // 4, in_channels // 4, kernel_size=1, padding=0)
         self.iwt = IWT()
-        self.se = SE_net(in_channels // 2, in_channels // 4)
+        self.last_conv = nn.Conv2d(in_channels // 2, in_channels // 4, kernel_size=1, padding=0)
+        # self.se = SE_net(in_channels // 2, in_channels // 4)
 
     def forward(self, x, x_dwt):
         x = self.pre_conv_stem(x)
@@ -205,7 +206,7 @@ class GCIWTResUp(nn.Module):
         x_iwt = self.iwt(x_dwt)
         x_iwt = self.post_conv(x_iwt)
         out = torch.cat((stem, x_iwt), dim=1)
-        out = self.se(out)
+        out = self.last_conv(out)
         return out
 
 
