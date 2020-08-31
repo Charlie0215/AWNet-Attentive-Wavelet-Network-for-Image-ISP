@@ -1,4 +1,4 @@
-# PyTorch implementation of AWNet 
+# AWNet 
 
 This is the official PyTorch implement of AWNet. Our Team, MacAI, recieved a Runner-Up award in the AIM 2020 Learned Image ISP challenge (ECCVWW 2020). The proposed solution can achieve excellent MOS while remaining competetive in numerical result. See more details from our [paper](https://arxiv.org/abs/2008.09228).
 
