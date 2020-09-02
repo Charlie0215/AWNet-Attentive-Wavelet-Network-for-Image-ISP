@@ -46,4 +46,12 @@ Compare with other state-of-the-arts:
 ## Acknowledgement
 We thank the authors of [MWCNN](https://github.com/lpj0/MWCNN.git), [GCNet](https://github.com/xvjiarui/GCNet.git), and [Pytorch_SSIM](https://github.com/Po-Hsun-Su/pytorch-ssim). Part of our code is built upon their modules.
 
-
+## Citation
+```
+@article{dai2020awnet,
+  title={AWNet: Attentive Wavelet Network for Image ISP},
+  author={Dai, Linhui and Liu, Xiaohong and Li, Chengqi and Chen, Jun},
+  journal={arXiv preprint arXiv:2008.09228},
+  year={2020}
+}
+```
