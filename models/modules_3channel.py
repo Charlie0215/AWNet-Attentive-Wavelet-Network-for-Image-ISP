@@ -6,11 +6,6 @@ from models.utils import DWT, IWT
 
 class GCRDB(nn.Module):
     def __init__(self, in_channels, att_block, num_dense_layer=6, growth_rate=16):
-        """
-        :param in_channels: input channel size
-        :param num_dense_layer: the number of RDB layers
-        :param growth_rate: growth_rate
-        """
         super(GCRDB, self).__init__()
         _in_channels = in_channels
         modules = []
