@@ -1,17 +1,19 @@
-from torch.utils.data import Dataset
-from torchvision import transforms
-import numpy as np
-import imageio
-import PIL.Image as Image
-import torch
+# -*- coding: utf-8 -*-
 import os
 import random
-from utils import fun_ensemble
+
+import numpy as np
+import PIL.Image as Image
+import torch
+from torch.utils.data import Dataset
+from torchvision import transforms
+
+from utils import ensemble_pillow
 
 to_tensor = transforms.Compose([transforms.ToTensor()])
 
 
-def extract_bayer_channels(raw):
+def extract_bayer_channels(raw: np.ndarray) -> np.ndarray:
     # Reshape the input bayer image
 
     ch_B = raw[1::2, 1::2]
@@ -26,15 +28,16 @@ def extract_bayer_channels(raw):
 
 
 class LoadData(Dataset):
+
     def __init__(self,
-                 dataset_dir,
-                 dataset_size,
-                 dslr_scale,
-                 test=False,
-                 if_rotate=True,
-                 if_filp=True,
-                 is_ensemble=False,
-                 is_rescale=False):
+                 dataset_dir: str,
+                 dataset_size: int,
+                 dslr_scale: int,
+                 test: bool = False,
+                 if_rotate: bool = True,
+                 if_filp: bool = True,
+                 is_ensemble: bool = False,
+                 is_rescale: bool = False):
         self.is_ensemble = is_ensemble
         self.is_test = test
         self.if_rotate = if_rotate
@@ -49,7 +52,7 @@ class LoadData(Dataset):
             self.dslr_dir = os.path.join(dataset_dir, 'train', 'canon')
 
         self.dataset_size = dataset_size
-        self.scale = dslr_scale  # dslr_scale
+        self.scale = dslr_scale
 
         self.tf1 = transforms.Compose([
             transforms.RandomVerticalFlip(p=1),
@@ -63,13 +66,12 @@ class LoadData(Dataset):
         ])
 
         self.toTensor = transforms.Compose([transforms.ToTensor()])
-        self.rotate = transforms.Compose(
-            [transforms.RandomRotation(degrees=(-45, 45))])
+        self.rotate = transforms.Compose([transforms.RandomRotation(degrees=(-45, 45))])
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.dataset_size
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, str]:
         raw_image = Image.open(os.path.join(self.raw_dir, str(idx) + ".png"))
         dslr_image = Image.open(os.path.join(self.dslr_dir, str(idx) + ".jpg"))
 
@@ -88,7 +90,7 @@ class LoadData(Dataset):
             dslr_image = self.rescale(dslr_image)
 
         if self.is_ensemble:
-            raw_image = fun_ensemble(raw_image)
+            raw_image = ensemble_pillow(raw_image)  # type: ignore
             raw_image = [self.toTensor(x) for x in raw_image]
         else:
             raw_image = self.toTensor(raw_image)
@@ -99,7 +101,8 @@ class LoadData(Dataset):
 
 
 class LoadData_real(Dataset):
-    def __init__(self, dataset_dir, is_ensemble=False):
+
+    def __init__(self, dataset_dir: str, is_ensemble: bool = False) -> None:
         self.is_ensemble = is_ensemble
 
         self.raw_dir = dataset_dir
@@ -109,16 +112,14 @@ class LoadData_real(Dataset):
 
         self.toTensor = transforms.Compose([transforms.ToTensor()])
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.dataset_size
 
-    def __getitem__(self, idx):
-        raw_image = Image.open(
-            os.path.join(self.raw_dir,
-                         str(idx + 1) + ".png"))
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, str]:
+        raw_image = Image.open(os.path.join(self.raw_dir, str(idx + 1) + ".png"))
 
         if self.is_ensemble:
-            raw_image = fun_ensemble(raw_image)
+            raw_image = ensemble_pillow(raw_image)  # type: ignore
             raw_image = [self.toTensor(x) for x in raw_image]
         else:
             raw_image = self.toTensor(raw_image)

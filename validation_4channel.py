@@ -1,32 +1,35 @@
+# -*- coding: utf-8 -*-
+import os
+import time
+
+import imageio  # type: ignore
+import numpy as np
+import PIL.Image as Image
 import torch
 import torch.nn as nn
-from models.model_4channel import AWNet
-
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-from torch.utils.data import DataLoader
 
 from config import trainConfig
-import numpy as np
-import imageio
-import PIL.Image as Image
-import time
-import os
-from utils import validation, fun_ensemble_back, save_validation_image, fun_ensemble, fun_ensemble_numpy
+from models.model_4channel import AWNet
+from utils import disassemble_ensembled_img, ensemble_ndarray, ensemble_pillow, save_validation_image
 
 ENSEMBLE = False
 
+
 class wrapped_4_channel(nn.Module):
-    def __init__(self):
+
+    def __init__(self) -> None:
         super().__init__()
         self.module = AWNet(4, 3, block=[3, 3, 3, 4, 4])
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.module(x)
+
 
 class LoadData_real(Dataset):
 
-    def __init__(self, dataset_dir, is_ensemble=False):
+    def __init__(self, dataset_dir: str, is_ensemble: bool = False) -> None:
         self.is_ensemble = is_ensemble
 
         self.raw_dir = os.path.join(dataset_dir, 'AIM2020_ISP_fullres_test_raw')
@@ -35,25 +38,29 @@ class LoadData_real(Dataset):
 
         self.toTensor = transforms.Compose([transforms.ToTensor()])
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.dataset_size
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> tuple[np.ndarray, str]:
         idx = idx + 1
         raw_image = np.asarray(imageio.imread(os.path.join(self.raw_dir, str(idx) + '.png')))
         raw_image = extract_bayer_channels(raw_image)
 
         if self.is_ensemble:
 
-            raw_image = fun_ensemble_numpy(raw_image)
-            raw_image = [torch.from_numpy(x.transpose((2, 0, 1)).copy()) for x in raw_image]
+            raw_image = ensemble_ndarray(raw_image)  # type: ignore
+            raw_image = [
+                torch.from_numpy(x.transpose(  # type: ignore
+                    (2, 0, 1)).copy()) for x in raw_image
+            ]
 
         else:
-            raw_image = torch.from_numpy(raw_image.transpose((2, 0, 1)).copy())
+            raw_image = torch.from_numpy(raw_image.transpose((2, 0, 1)).copy())  # type: ignore
 
         return raw_image, str(idx)
 
-def extract_bayer_channels(raw):
+
+def extract_bayer_channels(raw: np.ndarray) -> np.ndarray:
     # Reshape the input bayer image
 
     ch_B = raw[1::2, 1::2]
@@ -66,32 +73,36 @@ def extract_bayer_channels(raw):
 
     return RAW_norm
 
-def test():
+
+def test() -> None:
     net1 = wrapped_4_channel()
 
     net1.load_state_dict(
-        torch.load('{}/weight_4channel_best.pkl'.format(trainConfig.save_best), map_location="cpu")["model_state"])
+        torch.load("{trainConfig.save_best}/weight_4channel_best.pkl",
+                   map_location="cpu")["model_state"])  # type: ignore
     print('weight loaded.')
 
     test_dataset = LoadData_real(trainConfig.data_dir, is_ensemble=ENSEMBLE)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=0,
-                             pin_memory=False, drop_last=False)
+    test_loader = DataLoader(dataset=test_dataset,
+                             batch_size=1,
+                             shuffle=False,
+                             num_workers=0,
+                             pin_memory=False,
+                             drop_last=False)
 
     net1.eval()
     save_folder = './result_fullres_4channel/'
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
 
-    for batch_id, val_data in enumerate(test_loader):
+    for _, val_data in enumerate(test_loader):
 
-        with torch.no_grad():
+        with torch.no_grad():  # type: ignore
             raw_image, image_name = val_data
             if isinstance(raw_image, list):
-                print('ensemble')
                 y1 = [net1(i)[0][0] for i in raw_image]
-                y1 = fun_ensemble_back(y1)
-                print(y1.shape)
-                
+                y1 = disassemble_ensembled_img(y1)  # type: ignore
+
             else:
                 y1, _ = net1(raw_image)
                 y = y1[0]

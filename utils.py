@@ -1,47 +1,33 @@
+# -*- coding: utf-8 -*-
+import os
 import time
 from datetime import datetime
-from skimage import measure
-import os
-import cv2
-import numpy as np
-from PIL import Image
 from math import log10
+from typing import Optional, Type
+
+import numpy as np
+import PIL
 import torch
 import torch.nn.functional as F
-import torchvision.utils as utils
-import torch.nn as nn
-from torchvision.transforms import Compose, RandomCrop, ToTensor, ToPILImage, CenterCrop, Resize
+import torchvision
 import torchvision.utils as vutils
+from PIL import Image
+from skimage import measure
+from torchvision.transforms import Compose, ToPILImage, ToTensor
 
 
-def display_transform():
+def display_transform() -> torchvision.transforms.Compose:
     return Compose([ToPILImage(), ToTensor()])
 
 
-def get_colors():
+def get_colors() -> np.ndarray:
     '''
     Dictionary of color map
     '''
     return np.asarray([0, 128, 255])
 
 
-class time_calculator():
-    def __init__(self):
-        self.accumulate = 0
-
-    def calculator(self, start_time, end_time, length=0):
-        if length == 0:
-            total_time = int(end_time - start_time) + self.accumulate
-            self.accumulate = total_time
-        else:
-            total_time = int(end_time - start_time) * length
-        total_time_min = total_time // 60
-        total_time_sec = total_time % 60
-        total_time_hr = total_time // 2400
-        return total_time_hr, total_time_min, total_time_sec
-
-
-def writer_add_image(dir, writer, image, iter):
+def writer_add_image(dir: str, writer: torch.utils.tensorboard.SummaryWriter, image: np.ndarray, iter: int) -> None:
     '''
     tensorboard image writer
     '''
@@ -49,40 +35,34 @@ def writer_add_image(dir, writer, image, iter):
     writer.add_image(dir, x, iter)
 
 
-def save_image(target, preds, img_name, root):
+def save_image(target: torch.Tensor, preds: torch.Tensor, img_name: str, root: str) -> None:
     '''
     : img: image to be saved
     : img_name: image name
     '''
-    target = torch.split(target, 1, dim=0)
-    preds = torch.split(preds, 1, dim=0)
+    target = torch.split(target, 1, dim=0)  # type: ignore
+    preds = torch.split(preds, 1, dim=0)  # type: ignore
     batch_num = len(preds)
 
     for ind in range(batch_num):
-        vutils.save_image(
-            target[ind],
-            root + '{}'.format(img_name[ind].split('.png')[0] + '_target.png'))
-        vutils.save_image(
-            preds[ind],
-            root + '{}'.format(img_name[ind].split('.png')[0] + '_pred.png'))
+        vutils.save_image(target[ind], root + f"{img_name[ind].split('.png')[0] + '_target.png'}")
+        vutils.save_image(preds[ind], root + f"{img_name[ind].split('.png')[0] + '_pred.png'}")
 
 
-def save_validation_image(preds, img_name, save_folder):
+def save_validation_image(preds: torch.Tensor, img_name: str, save_folder: str) -> None:
     '''
     : img: image to be saved
     : img_name: image name
     '''
-    preds = torch.split(preds, 1, dim=0)
+    preds = torch.split(preds, 1, dim=0)  # type: ignore
     batch_num = len(preds)
 
     for ind in range(batch_num):
         print('saving {}'.format(img_name[ind]))
-        vutils.save_image(
-            preds[ind],
-            save_folder + '{}'.format(img_name[ind].split('.png')[0] + '.png'))
+        vutils.save_image(preds[ind], save_folder + '{}'.format(img_name[ind].split('.png')[0] + '.png'))
 
 
-def fun_ensemble(img):
+def ensemble_pillow(img: PIL.PngImagePlugin.PngImageFile) -> list[PIL.PngImagePlugin.PngImageFile]:
     imgs = [
         img,  # 0
         img.rotate(90),  # 1
@@ -96,7 +76,7 @@ def fun_ensemble(img):
     return imgs
 
 
-def fun_ensemble_numpy(img):
+def ensemble_ndarray(img: np.ndarray) -> list[np.ndarray]:
     imgs = [
         img,  # 0
         np.rot90(img, k=1, axes=(0, 1)),
@@ -110,49 +90,46 @@ def fun_ensemble_numpy(img):
     return imgs
 
 
-def fun_ensemble_back(imgs):
-    imgs = [
-        imgs[0], imgs[1].transpose(2, 3).flip(3), imgs[2].flip(2).flip(3),
-        imgs[3].transpose(2, 3).flip(2), imgs[4].flip(2), imgs[5].transpose(
-            2, 3), imgs[6].flip(3), imgs[7].transpose(2, 3).flip(2).flip(3)
+def disassemble_ensembled_img(imgs: torch.Tensor) -> torch.Tensor:
+    disassembled_img: list[torch.Tensor] = [
+        imgs[0], imgs[1].transpose(2, 3).flip(3), imgs[2].flip(2).flip(3), imgs[3].transpose(2, 3).flip(2),
+        imgs[4].flip(2), imgs[5].transpose(2, 3), imgs[6].flip(3), imgs[7].transpose(2, 3).flip(2).flip(3)
     ]
 
-    img = sum(imgs) / len(imgs)
+    mean_disassembled_img = sum(disassembled_img) / len(imgs)
 
-    return img
+    return img  # type: ignore
 
 
-def validation(net,
-               val_data_loader,
-               device,
-               texture_net=None,
-               save_tag=False,
-               mode='student',
-               is_validation=False,
-               is_ensemble=False):
+def validation(net: torch.nn.Module,
+               val_data_loader: torch.utils.DataLoader,
+               device: torch.device,
+               texture_net: Optional[torch.nn.Module] = None,
+               save_tag: bool = False,
+               mode: str = "student",
+               is_validation: bool = False,
+               is_ensemble: bool = False) -> tuple[float, float]:
     psnr_list = []
     ssim_list = []
-    save_folder = os.path.join(
-        './results',
-        'result_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '/')
+    save_folder = os.path.join('./results', 'result_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '/')
     net.eval()
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
 
     for batch_id, val_data in enumerate(val_data_loader):
-        with torch.no_grad():
+        with torch.no_grad():  # type: ignore
             x, target, image_name = val_data
             target = target.to(device, non_blocking=True)
             if mode == 'orig_size':
                 if isinstance(x, list):
                     x = [i.to(device) for i in x]
-                    y = [net(i)[1] for i in x]
-                    y = fun_ensemble_back(y)
+                    pred_tensors = [net(i)[1] for i in x]
+                    y = disassemble_ensembled_img(pred_tensors)  # type: ignore
                 else:
                     x = x.to(device, non_blocking=True)
                     _, y, _ = net(x)
                 psnr_list.extend(to_psnr(y, target))
-                ssim_list.extend(to_ssim_skimage(y, target))
+                ssim_list.extend(to_ssim_skimage(y, target))  # type: ignore
             elif mode == 'student' or mode == 'teacher':
                 if texture_net:
                     x = x.to(device, non_blocking=True)
@@ -163,10 +140,10 @@ def validation(net,
                 else:
                     if isinstance(x, list):
                         x = [i.to(device) for i in x]
-                        y = [net(i)[0][0] for i in x]
-                        y = fun_ensemble_back(y)
+                        y = [net(i)[0][0] for i in x]  # type: ignore
+                        y = disassemble_ensembled_img(y)
                         psnr_list.extend(to_psnr(y, target))
-                        ssim_list.extend(to_ssim_skimage(y, target))
+                        ssim_list.extend(to_ssim_skimage(y, target))  # type: ignore
                     else:
                         x = x.to(device, non_blocking=True)
                         y, _ = net(x)
@@ -177,23 +154,21 @@ def validation(net,
                 x = x.to(device, non_blocking=True)
                 y = net(x)
                 psnr_list.extend(to_psnr(y, target))
-                ssim_list.extend(to_ssim_skimage(y, target))
+                ssim_list.extend(to_ssim_skimage(y, target))  # type: ignore
 
         # Save image
         if save_tag:
             if mode == 'orig_size':
-                save_image(target, y, image_name, save_folder)
-            elif (mode == 'student'
-                  or mode == 'teacher') and is_validation == False:
+                save_image(target, y, image_name, save_folder)  # type: ignore
+            elif (mode == 'student' or mode == 'teacher') and is_validation == False:
                 save_image(target, y[0], image_name, save_folder)
-            elif (mode == 'student'
-                  or mode == 'teacher') and is_validation == True:
+            elif (mode == 'student' or mode == 'teacher') and is_validation == True:
                 if is_ensemble:
-                    save_validation_image(y, image_name, './validation')
+                    save_validation_image(y, image_name, './validation')  # type: ignore
                 else:
                     save_validation_image(y[0], image_name, './validation')
             elif mode == 'texture':
-                save_image(target, y, image_name, save_folder)
+                save_image(target, y, image_name, save_folder)  # type: ignore
 
     avr_psnr = sum(psnr_list) / len(psnr_list)
     avr_ssim = sum(ssim_list) / len(ssim_list)
@@ -201,13 +176,10 @@ def validation(net,
     return avr_psnr, avr_ssim
 
 
-def to_psnr(dehaze, gt):
+def to_psnr(dehaze: torch.Tenspr, gt: torch.Tensor) -> list[float]:
     mse = F.mse_loss(dehaze, gt, reduction='none')
-    mse_split = torch.split(mse, 1, dim=0)
-    mse_list = [
-        torch.mean(torch.squeeze(mse_split[ind])).item()
-        for ind in range(len(mse_split))
-    ]
+    mse_split = torch.split(mse, 1, dim=0)  # type: ignore
+    mse_list = [torch.mean(torch.squeeze(mse_split[ind])).item() for ind in range(len(mse_split))]
 
     # ToTensor scales input images to [0.0, 1.0]
     intensity_max = 1.0
@@ -215,21 +187,17 @@ def to_psnr(dehaze, gt):
     return psnr_list
 
 
-def to_ssim_skimage(dehaze, gt):
-    dehaze_list = torch.split(dehaze, 1, dim=0)
-    gt_list = torch.split(gt, 1, dim=0)
+def to_ssim_skimage(dehaze: torch.Tensor, gt: torch.Tensor) -> list[float]:
+    dehaze_list = torch.split(dehaze, 1, dim=0)  # type: ignore
+    gt_list = torch.split(gt, 1, dim=0)  # type: ignore
 
     dehaze_list_np = [
-        dehaze_list[ind].permute(0, 2, 3, 1).data.cpu().numpy().squeeze()
-        for ind in range(len(dehaze_list))
+        dehaze_list[ind].permute(0, 2, 3, 1).data.cpu().numpy().squeeze() for ind in range(len(dehaze_list))
     ]
-    gt_list_np = [
-        gt_list[ind].permute(0, 2, 3, 1).data.cpu().numpy().squeeze()
-        for ind in range(len(dehaze_list))
-    ]
+    gt_list_np = [gt_list[ind].permute(0, 2, 3, 1).data.cpu().numpy().squeeze() for ind in range(len(dehaze_list))]
     ssim_list = [
         measure.compare_ssim(
-            dehaze_list_np[ind],
+            dehaze_list_np[ind],  # type: ignore
             gt_list_np[ind],
             data_range=1,
             multichannel=True,
@@ -241,40 +209,37 @@ def to_ssim_skimage(dehaze, gt):
     return ssim_list
 
 
-def print_log(epoch, num_epochs, one_epoch_time, train_psnr, val_psnr,
-              val_ssim, category):
+def print_log(epoch: int, num_epochs: int, one_epoch_time: str, train_psnr: float, val_psnr: float, val_ssim: float,
+              category: str) -> None:
     print(
-        '({0:.0f}s) Epoch [{1}/{2}], Train_PSNR:{3:.2f}, Val_PSNR:{4:.2f}, Val_SSIM:{5:.4f}'
-        .format(one_epoch_time, epoch, num_epochs, train_psnr, val_psnr,
-                val_ssim))
+        f"({one_epoch_time:.0f}s) Epoch [{epoch}/{num_epochs}], Train_PSNR:{train_psnr:.2f}, Val_PSNR:{train_psnr:.2f}, Val_SSIM:{val_psnr:.4f}"
+    )
     # write training log
     with open('./training_log/{}_log.txt'.format(category), 'a') as f:
         print(
-            'Date: {0}s, Time_Cost: {1:.0f}s, Epoch: [{2}/{3}], Train_PSNR: {4:.2f}, Val_Image_PSNR: {5:.2f}, Val_Image_SSIM: {6:.4f}'
-            .format(
-                time.strftime("%Y-%m-%d %H:%M:%S",
-                              time.localtime()), one_epoch_time, epoch,
-                num_epochs, train_psnr, val_psnr, val_ssim),
+            f"Date: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}s, Time_Cost: {one_epoch_time:.0f}s, Epoch: [{epoch}/{num_epochs}], Train_PSNR: {train_psnr:.2f}, Val_Image_PSNR: {val_psnr:.2f}, Val_Image_SSIM: {val_ssim:.4f}",
             file=f)
 
 
-def adjust_learning_rate(optimizer, scheduler, epoch, learning_rate, writer):
+def adjust_learning_rate(optimizer: Type[torch.optim.Optimizer], scheduler: Type[torch.optim.lr_scheduler], epoch: int,
+                         learning_rate: float, writer: torch.utils.tensorboard.SummaryWriter) -> float:  # type: ignore
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
 
     if epoch > 0:  # and epoch < 16:
         if epoch % 2 == 0:
-            learning_rate = scheduler.get_lr()[0]
+            learning_rate = scheduler.get_lr()[0]  # type: ignore
             for param_group in optimizer.param_groups:
                 param_group['lr'] = learning_rate
                 print('Learning rate sets to {}.'.format(param_group['lr']))
-                scheduler.step()
+                scheduler.step()  # type: ignore
             writer.add_scalars('lr/train_lr_group', {
                 'lr': learning_rate,
             }, epoch)
     return learning_rate
 
 
-def poly_learning_decay(optimizer, iter, total_epoch, loader_length, writer):
+def poly_learning_decay(optimizer: Type[torch.optim.Optimizer], iter: int, total_epoch: int, loader_length: int,
+                        writer: torch.utils.tensorboard.SummaryWriter) -> float:
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     max_iteration = total_epoch * loader_length
     learning_rate = optimizer.param_groups[0]['lr']
@@ -288,7 +253,7 @@ def poly_learning_decay(optimizer, iter, total_epoch, loader_length, writer):
     return learning_rate
 
 
-def set_requires_grad(nets, requires_grad=False):
+def set_requires_grad(nets: list[torch.nn.Module], requires_grad: bool = False) -> None:
     if not isinstance(nets, list):
         nets = [nets]
     for net in nets:
@@ -297,7 +262,8 @@ def set_requires_grad(nets, requires_grad=False):
                 param.requires_grad = requires_grad
 
 
-def adjust_learning_rate_step(optimizer, epoch, num_epochs, learning_rate):
+def adjust_learning_rate_step(optimizer: torch.optim.Optimizer, epoch: int, num_epochs: int,
+                              learning_rate: list[float]) -> float:
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     step = num_epochs // len(learning_rate)
 

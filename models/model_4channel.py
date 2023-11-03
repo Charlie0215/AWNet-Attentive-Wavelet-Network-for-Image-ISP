@@ -1,14 +1,16 @@
+# -*- coding: utf-8 -*-
+import functools
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.utils import DWT, IWT
-from models.modules_4channel import shortcutblock, GCIWTResUp, GCWTResDown, GCRDB, ContextBlock2d, SE_net, PSPModule, \
-    last_upsample
-import functools
+
+from models.modules_4channel import GCRDB, ContextBlock2d, GCIWTResUp, GCWTResDown, SE_net, last_upsample, shortcutblock
 
 
 class AWNet(nn.Module):
-    def __init__(self, in_channels, out_channels, block=[2, 2, 2, 3, 4]):
+
+    def __init__(self, in_channels: int, out_channels: int, block: list[int] = [2, 2, 2, 3, 4]):
         super().__init__()
 
         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
@@ -77,7 +79,7 @@ class AWNet(nn.Module):
 
         self.last = last_upsample()
 
-    def forward(self, x, target=None, teacher_latent=None):
+    def forward(self, x: torch.Tensor):
 
         x1 = self.conv1(x)
 

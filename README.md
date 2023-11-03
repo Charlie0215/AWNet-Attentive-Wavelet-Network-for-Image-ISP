@@ -1,4 +1,4 @@
-# AWNet 
+# AWNet
 
 This is the official PyTorch implement of AWNet. Our Team, MacAI, recieved a Runner-Up award in the AIM 2020 Learned Image ISP challenge (ECCVW 2020). The proposed solution can achieve excellent MOS while remaining competetive in numerical result. See more details from our [paper](https://arxiv.org/abs/2008.09228).
 
@@ -8,16 +8,21 @@ As the revolutionary improvement being made on the performance of smartphones ov
 ## Presentation Video
 [![Watch the video](https://img.youtube.com/vi/HlrzVFMUwCQ/0.jpg)](https://youtu.be/HlrzVFMUwCQ)
 
-## Pretrained Models & Dataset
-1. Download [demosaiced_model](https://drive.google.com/file/d/1uhohG6cYkM_-W4dGLl8yGlo85UMF6KEK/view?usp=sharing) and [Raw_model](https://drive.google.com/file/d/1jBwEm7_zbU55qOlGAVuOAQ8BIwx2g7Fw/view?usp=sharing) and place into the folder ```./best_weight```.  
+## Pretrained Models & The ZRR Dataset
+1. Download [demosaiced_model](https://drive.google.com/file/d/1uhohG6cYkM_-W4dGLl8yGlo85UMF6KEK/view?usp=sharing) and [Raw_model](https://drive.google.com/file/d/1jBwEm7_zbU55qOlGAVuOAQ8BIwx2g7Fw/view?usp=sharing) and place into the folder ```./best_weight```.
 2. Download the ZRR dataset from [here](https://competitions.codalab.org/competitions/24718)
 
+## Environment
+The project is built on **Python 3.9**. You can run the following script to setup the venv.
+```
+script/setup_venv.sh
+```
 
-If you want to reproduce our result for the AIM 2020 challenge, please follow the steps in ```old_version``` branch. The model in ```master``` has been modified to match the architecture described in our paper.
+If you want to reproduce our results from the AIM 2020 challenge, please follow the steps in ```old_version``` branch. Though the results are similar, the model definition in ```master``` is slightly different as described in our paper.
 
 ## Training
 1. Generate pseudo-demosicing images for 3-channel-input model.
-``` 
+```
     cd demosaic
     python demosaic.py -data <directory contains your raw images> -save <directory to save your pseudo-demosaicing images>
 ```
@@ -27,20 +32,20 @@ Then, move the resulting folder of demosaicing images under your root dataset di
 
 ## Testing
 1. Generate pseudo-demosicing images for 3-channel-input model.
-``` 
+```
     cd demosaic
-    python demosaic.py -data <directory contains your raw images> -save <directory to save your pseudo-demosaicing images>
+    python script/demosaic.py -data <directory contains your raw images> -save <directory to save your pseudo-demosaicing images>
 ```
 Then, move the resulting folder of demosaicing images under your root dataset directory.
-Please make sure your dataset structure is the same as what we show in the <em>Training/Validation Dataset Strcuture</em> section.  
-2. To reproduce our final results from testing board, run ```python validation_final.py```.  
-3. To reporduce our full resolution result, run ```python validation_final_fullres.py```.  
+Please make sure your dataset structure is the same as what we show in the <em>Training/Validation Dataset Strcuture</em> section.
+2. To reproduce our final results from testing board, run ```python validation_final.py```.
+3. To reporduce our full resolution result, run ```python validation_final_fullres.py```.
 
 ## Qualitative Results
-Full resolution:  
+Full resolution:
 <img alt="" src="/images/qualitative.png" style="display: inline-block;" />
 
-Compare with other state-of-the-arts:  
+Compare with other state-of-the-arts:
 <div style="text-align: center">
 <img alt="" src="/images/qualitative2.png" style="display: inline-block;" />
 </div>

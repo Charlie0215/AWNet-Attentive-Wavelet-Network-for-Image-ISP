@@ -1,32 +1,33 @@
+# -*- coding: utf-8 -*-
+import os
+
+import numpy as np
+import PIL.Image as Image
 import torch
 import torch.nn as nn
-
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-from torch.utils.data import DataLoader
 
-from models.model_3channel import AWNet
 from config import trainConfig
-import numpy as np
-import imageio
-import PIL.Image as Image
-import time
-import os
-from utils import validation, fun_ensemble_back, save_validation_image, fun_ensemble, fun_ensemble_numpy
-
+from models.model_3channel import AWNet
+from utils import disassemble_ensembled_img, ensemble_pillow, save_validation_image
 
 ENSEMBLE = False
 
+
 class wrapped_3_channel(nn.Module):
-    def __init__(self):
+
+    def __init__(self) -> None:
         super().__init__()
-        self.module = AWNet(3,3, block=[3,3,3,4,4])
-    def forward(self, x):
+        self.module = AWNet(3, 3, block=[3, 3, 3, 4, 4])
+
+    def forward(self, x: torch.Tensor) -> None:
         return self.module(x)
+
 
 class LoadData_real(Dataset):
 
-    def __init__(self, dataset_dir, is_ensemble=False):
+    def __init__(self, dataset_dir: str, is_ensemble: bool = False) -> None:
         self.is_ensemble = is_ensemble
 
         self.raw_dir = os.path.join(dataset_dir, 'AIM2020_ISP_fullres_test_raw_pseudo_demosaicing')
@@ -35,15 +36,15 @@ class LoadData_real(Dataset):
 
         self.toTensor = transforms.Compose([transforms.ToTensor()])
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.dataset_size
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, str]:
         idx = idx + 1
         raw_image = Image.open(os.path.join(self.raw_dir, str(idx) + ".png"))
 
         if self.is_ensemble:
-            raw_image = fun_ensemble(raw_image)
+            raw_image = ensemble_pillow(raw_image)
             raw_image = [self.toTensor(x) for x in raw_image]
 
         else:
@@ -51,7 +52,8 @@ class LoadData_real(Dataset):
 
         return raw_image, str(idx)
 
-def extract_bayer_channels(raw):
+
+def extract_bayer_channels(raw: np.ndarray) -> np.ndarray:
     # Reshape the input bayer image
 
     ch_B = raw[1::2, 1::2]
@@ -64,38 +66,46 @@ def extract_bayer_channels(raw):
 
     return RAW_norm
 
-def test():
+
+def test() -> None:
     device_ids = [0]
-    print('using device: {}'.format(device_ids))
+    print(f"Using device: {device_ids}")
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     net = wrapped_3_channel()
     # Reload
 
-    net.load_state_dict(torch.load('{}/weight_3channel_best.pkl'.format(trainConfig.save_best), map_location='cpu')["model_state"])
-    print('weight loaded.')
+    net.load_state_dict(
+        torch.load(f"{trainConfig.save_best}/weight_3channel_best.pkl",
+                   map_location="cpu")["model_state"])  # type: ignore
+    print("weight loaded.")
 
     test_dataset = LoadData_real(trainConfig.data_dir, is_ensemble=ENSEMBLE)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=0,
-                                pin_memory=False, drop_last=False)
+    test_loader = DataLoader(dataset=test_dataset,
+                             batch_size=1,
+                             shuffle=False,
+                             num_workers=0,
+                             pin_memory=False,
+                             drop_last=False)
 
     net.eval()
     save_folder = './result_fullres_3channel/'
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
 
-    for batch_id, val_data in enumerate(test_loader):
+    for _, val_data in enumerate(test_loader):
 
-        with torch.no_grad():
+        with torch.no_grad():  # type: ignore
             x, image_name = val_data
             if isinstance(x, list):
                 y = [net(i)[0][0] for i in x]
-                y = fun_ensemble_back(y)
+                y = disassemble_ensembled_img(y)  # type: ignore
             else:
                 y, _ = net(x)
         if ENSEMBLE:
-            save_validation_image(y, image_name, save_folder)
+            save_validation_image(y, image_name, save_folder)  # type: ignore
         else:
             save_validation_image(y[0], image_name, save_folder)
+
 
 if __name__ == '__main__':
     test()

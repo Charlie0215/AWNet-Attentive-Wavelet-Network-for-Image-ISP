@@ -1,8 +1,9 @@
+# -*- coding: utf-8 -*-
 import torch
 import torch.nn as nn
 
 
-def dwt_init(x):
+def dwt_init(x: torch.Tensor) -> torch.Tensor:
 
     x01 = x[:, :, 0::2, :] / 2
     x02 = x[:, :, 1::2, :] / 2
@@ -17,11 +18,11 @@ def dwt_init(x):
 
     return x_LL, torch.cat((x_LL, x_HL, x_LH, x_HH), 1)
 
-def iwt_init(x):
+
+def iwt_init(x: torch.Tensor) -> torch.Tensor:
     r = 2
     in_batch, in_channel, in_height, in_width = x.size()
-    out_batch, out_channel, out_height, out_width = in_batch, int(
-        in_channel / (r**2)), r * in_height, r * in_width
+    out_batch, out_channel, out_height, out_width = in_batch, int(in_channel / (r**2)), r * in_height, r * in_width
     x1 = x[:, 0:out_channel, :, :] / 2
     x2 = x[:, out_channel:out_channel * 2, :, :] / 2
     x3 = x[:, out_channel * 2:out_channel * 3, :, :] / 2
@@ -35,18 +36,22 @@ def iwt_init(x):
 
     return h
 
+
 class DWT(nn.Module):
-    def __init__(self):
+
+    def __init__(self) -> None:
         super(DWT, self).__init__()
         self.requires_grad = False
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return dwt_init(x)
 
+
 class IWT(nn.Module):
-    def __init__(self):
+
+    def __init__(self) -> None:
         super(IWT, self).__init__()
         self.requires_grad = False
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return iwt_init(x)

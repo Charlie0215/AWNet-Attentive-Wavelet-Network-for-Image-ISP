@@ -1,11 +1,20 @@
+# -*- coding: utf-8 -*-
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from models.utils import DWT, IWT
 
 
 class GCRDB(nn.Module):
-    def __init__(self, in_channels, att_block, num_dense_layer=6, growth_rate=16):
+
+    def __init__(self,
+                 in_channels: int,
+                 att_block: torch.nn.Module,
+                 num_dense_layer: int = 6,
+                 growth_rate: int = 16) -> None:
         super(GCRDB, self).__init__()
         _in_channels = in_channels
         modules = []
@@ -16,7 +25,7 @@ class GCRDB(nn.Module):
         self.conv_1x1 = nn.Conv2d(_in_channels, in_channels, kernel_size=1, padding=0)
         self.final_att = att_block(inplanes=in_channels, planes=in_channels)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out_rdb = self.residual_dense_layers(x)
         out_rdb = self.conv_1x1(out_rdb)
         out_rdb = self.final_att(out_rdb)
@@ -25,12 +34,13 @@ class GCRDB(nn.Module):
 
 
 class MakeDense(nn.Module):
-    def __init__(self, in_channels, growth_rate, kernel_size=3):
+
+    def __init__(self, in_channels: int, growth_rate: int, kernel_size: int = 3) -> None:
         super(MakeDense, self).__init__()
         self.conv = nn.Conv2d(in_channels, growth_rate, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
-        self.norm_layer = nn.BatchNorm2d(growth_rate)
+        self.norm_layer = nn.BatchNorm2d(growth_rate)  # type: ignore
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = F.relu(self.conv(x))
         out = self.norm_layer(out)
         out = torch.cat((x, out), 1)
@@ -38,7 +48,8 @@ class MakeDense(nn.Module):
 
 
 class SE_net(nn.Module):
-    def __init__(self, in_channels, out_channels, reduction=4, attention=True):
+
+    def __init__(self, in_channels: int, out_channels: int, reduction: int = 4, attention: bool = True) -> None:
         super().__init__()
         self.attention = attention
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
@@ -48,7 +59,7 @@ class SE_net(nn.Module):
 
         self.x_red = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
 
         if self.attention is True:
             y = self.avg_pool(x)
@@ -63,7 +74,12 @@ class SE_net(nn.Module):
 
 class ContextBlock2d(nn.Module):
 
-    def __init__(self, inplanes=9, planes=32, pool='att', fusions=['channel_add'], ratio=4):
+    def __init__(self,
+                 inplanes: int = 9,
+                 planes: int = 32,
+                 pool: str = 'att',
+                 fusions: list[str] = ['channel_add'],
+                 ratio: int = 4) -> None:
         super(ContextBlock2d, self).__init__()
         assert pool in ['avg', 'att']
         assert all([f in ['channel_add', 'channel_mul'] for f in fusions])
@@ -77,26 +93,18 @@ class ContextBlock2d(nn.Module):
             self.softmax = nn.Softmax(dim=2)
         else:
             self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.channel_add_conv: Optional[torch.nn.Sequential] = None
         if 'channel_add' in fusions:
-            self.channel_add_conv = nn.Sequential(
-                nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
-                nn.LayerNorm([self.planes // ratio, 1, 1]),
-                nn.PReLU(),
-                nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1)
-            )
-        else:
-            self.channel_add_conv = None
+            self.channel_add_conv = nn.Sequential(nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
+                                                  nn.LayerNorm([self.planes // ratio, 1, 1]), nn.PReLU(),
+                                                  nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1))
+        self.channel_mul_conv: Optional[torch.nn.Sequential] = None
         if 'channel_mul' in fusions:
-            self.channel_mul_conv = nn.Sequential(
-                nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
-                nn.LayerNorm([self.planes // ratio, 1, 1]),
-                nn.PReLU(),
-                nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1)
-            )
-        else:
-            self.channel_mul_conv = None
+            self.channel_mul_conv = nn.Sequential(nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
+                                                  nn.LayerNorm([self.planes // ratio, 1, 1]), nn.PReLU(),
+                                                  nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1))
 
-    def spatial_pool(self, x):
+    def spatial_pool(self, x: torch.Tensor) -> torch.Tensor:
         batch, channel, height, width = x.size()
         if self.pool == 'att':
             input_x = x
@@ -122,7 +130,7 @@ class ContextBlock2d(nn.Module):
 
         return context
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         # [N, C, 1, 1]
         context = self.spatial_pool(x)
 
@@ -141,37 +149,37 @@ class ContextBlock2d(nn.Module):
 
 
 class GCWTResDown(nn.Module):
-    def __init__(self, in_channels, att_block, norm_layer=nn.BatchNorm2d):
+
+    def __init__(self, in_channels: int, norm_layer: torch.nn.Module) -> None:
         super().__init__()
         self.dwt = DWT()
         if norm_layer:
             self.stem = nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=1),
-                                      norm_layer(in_channels),
-                                      nn.PReLU(),
+                                      norm_layer(in_channels), nn.PReLU(),
                                       nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
-                                      norm_layer(in_channels),
-                                      nn.PReLU())
+                                      norm_layer(in_channels), nn.PReLU())
         else:
             self.stem = nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=1),
-                                      nn.PReLU(),
-                                      nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
-                                      nn.PReLU())
+                                      nn.PReLU(), nn.Conv2d(in_channels,
+                                                            in_channels,
+                                                            kernel_size=3,
+                                                            stride=1,
+                                                            padding=1), nn.PReLU())
         self.conv1x1 = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
         self.conv_down = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, stride=2)
-        #self.att = att_block(in_channels * 2, in_channels * 2)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         stem = self.stem(x)
         xLL, dwt = self.dwt(x)
         res = self.conv1x1(xLL)
         out = torch.cat([stem, res], dim=1)
-        #out = self.att(out)
+        # out = self.att(out)
         return out, dwt
 
 
 class GCIWTResUp(nn.Module):
 
-    def __init__(self, in_channels, att_block, norm_layer=None):
+    def __init__(self, in_channels: int, norm_layer: torch.nn.Module) -> None:
         super().__init__()
         if norm_layer:
             self.stem = nn.Sequential(
@@ -199,7 +207,7 @@ class GCIWTResUp(nn.Module):
         self.last_conv = nn.Conv2d(in_channels // 2, in_channels // 4, kernel_size=1, padding=0)
         # self.se = SE_net(in_channels // 2, in_channels // 4)
 
-    def forward(self, x, x_dwt):
+    def forward(self, x: torch.Tensor, x_dwt: torch.Tensor) -> torch.Tensor:
         x = self.pre_conv_stem(x)
         stem = self.stem(x)
         x_dwt = self.pre_conv(x_dwt)
@@ -211,61 +219,54 @@ class GCIWTResUp(nn.Module):
 
 
 class shortcutblock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+
+    def __init__(self, in_channels: int, out_channels: int) -> None:
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
         self.se = SE_net(out_channels, out_channels)
         self.relu = nn.ReLU()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.se(self.relu(self.conv2(self.relu(self.conv1(x)))))
 
 
 class PSPModule(nn.Module):
-    def __init__(self, features, out_features=1024, sizes=(1, 2, 3, 6)):
-        super().__init__()
-        self.stages = []
-        self.stages = nn.ModuleList([self._make_stage(features, size) for size in sizes])
-        self.bottleneck = nn.Conv2d(features * (len(sizes) + 1), out_features, kernel_size=1)
-        self.relu = nn.ReLU()
 
-    def _make_stage(self, features, size):
-        prior = nn.AdaptiveAvgPool2d(output_size=(size, size))
-        conv = nn.Conv2d(features, features, kernel_size=1, bias=False)
+    def __init__(self, num_features: int, out_features: int = 1024, sizes: tuple[int, ...] = (1, 2, 3, 6)) -> None:
+        super().__init__()
+        self._stages = nn.ModuleList([self._make_stage(num_features, size) for size in sizes])
+        self._bottleneck = nn.Conv2d(num_features * (len(sizes) + 1), out_features, kernel_size=1)
+        self._relu = nn.ReLU()
+
+    def _make_stage(self, conv_num_channels: int, aapooling_feat_size: int) -> torch.nn.Sequential:
+        prior = nn.AdaptiveAvgPool2d(output_size=(aapooling_feat_size, aapooling_feat_size))
+        conv = nn.Conv2d(conv_num_channels, conv_num_channels, kernel_size=1, bias=False)
         return nn.Sequential(prior, conv)
 
-    def forward(self, feats):
+    def forward(self, feats: torch.Tensor) -> torch.Tensor:
         h, w = feats.size(2), feats.size(3)
-        priors = [F.upsample(input=stage(feats), size=(h, w), mode='bilinear') for stage in self.stages] + [feats]
-        bottle = self.bottleneck(torch.cat(priors, 1))
-        return self.relu(bottle)
+        priors = [F.upsample(input=stage(feats), size=(h, w), mode='bilinear') for stage in self._stages] + [feats]
+        bottle = self._bottleneck(torch.cat(priors, 1))
+        return self._relu(bottle)
 
 
 class last_upsample(nn.Module):
-    def __init__(self):
+
+    def __init__(self) -> None:
         super().__init__()
-        self.up = nn.PixelShuffle(2)
-        self.pre_enhance = nn.Conv2d(16, 16, kernel_size=3, padding=1)
-        self.enhance = PSPModule(16, 16)
-        self.post_conv = nn.Conv2d(32, 32, kernel_size=3, padding=1)
-        self.se = SE_net(32, 32)
-        self.final = nn.Conv2d(32, 3, kernel_size=3, padding=1)
+        self._up = nn.PixelShuffle(2)
+        self._pre_enhance = nn.Conv2d(16, 16, kernel_size=3, padding=1)
+        self._enhance = PSPModule(16, 16)
+        self._post_conv = nn.Conv2d(32, 32, kernel_size=3, padding=1)
+        self._se = SE_net(32, 32)
+        self._final = nn.Conv2d(32, 3, kernel_size=3, padding=1)
 
-    def forward(self, x):
-        x = self.up(x)
-        x = self.pre_enhance(x)
-        enhanced = self.enhance(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self._up(x)
+        x = self._pre_enhance(x)
+        enhanced = self._enhance(x)
         x = torch.cat((enhanced, x), dim=1)
-        out = self.se(self.post_conv(x))
-        out = self.final(out)
+        out = self._se(self._post_conv(x))
+        out = self._final(out)
         return F.sigmoid(out)
-
-
-if __name__ == '__main__':
-    x = torch.randn(1, 256, 112, 112)
-    net2 = GCWTResDown(256, ContextBlock2d)
-    net3 = GCIWTResUp(1024, ContextBlock2d)
-    y = net2(x)
-    print(y[0].shape, y[1].shape)
-    y = net3(y[0], y[1])

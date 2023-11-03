@@ -1,61 +1,65 @@
+# -*- coding: utf-8 -*-
+import functools
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.utils import DWT, IWT
-from models.modules_3channel import shortcutblock, GCIWTResUp, GCWTResDown, GCRDB, ContextBlock2d, SE_net, PSPModule
-import functools
+
+from models.modules_3channel import GCRDB, ContextBlock2d, GCIWTResUp, GCWTResDown, PSPModule, SE_net, shortcutblock
 
 
 class AWNet(nn.Module):
-    def __init__(self, in_channels, out_channels, block=[2,2,2,3,4]):
+
+    def __init__(self, in_channels: int, out_channels: int, block: list[int] = [2, 2, 2, 3, 4]) -> None:
         super().__init__()
-        
+
         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
-        
-        #layer1
+
+        # layer1
         _layer_1_dw = []
         for i in range(block[0]):
             _layer_1_dw.append(GCRDB(64, ContextBlock2d))
-        _layer_1_dw.append(GCWTResDown(64, ContextBlock2d, norm_layer=None))
+        _layer_1_dw.append(GCWTResDown(64, norm_layer=None))
         self.layer1 = nn.Sequential(*_layer_1_dw)
 
-        #layer 2
+        # layer 2
         _layer_2_dw = []
         for i in range(block[1]):
             _layer_2_dw.append(GCRDB(128, ContextBlock2d))
-        _layer_2_dw.append(GCWTResDown(128, ContextBlock2d, norm_layer=None))
+        _layer_2_dw.append(GCWTResDown(128, norm_layer=None))
         self.layer2 = nn.Sequential(*_layer_2_dw)
 
-        #layer 3
+        # layer 3
         _layer_3_dw = []
         for i in range(block[2]):
             _layer_3_dw.append(GCRDB(256, ContextBlock2d))
-        _layer_3_dw.append(GCWTResDown(256, ContextBlock2d, norm_layer=None))
+        _layer_3_dw.append(GCWTResDown(256, norm_layer=None))
         self.layer3 = nn.Sequential(*_layer_3_dw)
 
-        #layer 4
+        # layer 4
         _layer_4_dw = []
         for i in range(block[3]):
             _layer_4_dw.append(GCRDB(512, ContextBlock2d))
-        _layer_4_dw.append(GCWTResDown(512, ContextBlock2d, norm_layer=None))
+        _layer_4_dw.append(GCWTResDown(512, norm_layer=None))
         self.layer4 = nn.Sequential(*_layer_4_dw)
 
-        #layer 5
+        # layer 5
         _layer_5_dw = []
         for i in range(block[4]):
             _layer_5_dw.append(GCRDB(1024, ContextBlock2d))
         self.layer5 = nn.Sequential(*_layer_5_dw)
 
-        #upsample4
+        # upsample4
         self.layer4_up = GCIWTResUp(1024, ContextBlock2d)
 
-        #upsample3
+        # upsample3
         self.layer3_up = GCIWTResUp(512, ContextBlock2d)
 
-        #upsample2
+        # upsample2
         self.layer2_up = GCIWTResUp(256, ContextBlock2d)
 
-        #upsample1
+        # upsample1
         self.layer1_up = GCIWTResUp(128, ContextBlock2d)
 
         self.sc_x1 = shortcutblock(64)
@@ -67,7 +71,7 @@ class AWNet(nn.Module):
         self.scale_4 = nn.Conv2d(512, out_channels, kernel_size=3, padding=1)
         self.scale_3 = nn.Conv2d(256, out_channels, kernel_size=3, padding=1)
         self.scale_2 = nn.Conv2d(128, out_channels, kernel_size=3, padding=1)
-        
+
         self.final_conv = nn.Conv2d(64, out_channels, kernel_size=3, padding=1)
 
         self.se1 = SE_net(64, 64)
@@ -76,9 +80,14 @@ class AWNet(nn.Module):
         self.se4 = SE_net(512, 512)
         self.se5 = SE_net(1024, 1024)
 
-        self.enhance = PSPModule(features=64, out_features=64, sizes=(1, 2, 3, 6))        
+        self.enhance = PSPModule(features=64, out_features=64, sizes=(1, 2, 3, 6))
 
-    def forward(self, x, target=None, teacher_latent=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        target: Optional[torch.Tensor] = None,
+        teacher_latent: Optional[torch.Tensor] = None
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]:
 
         x1 = self.conv1(x)
 
@@ -104,4 +113,4 @@ class AWNet(nn.Module):
         out = self.final_conv(x1_up)
         out = F.sigmoid(out)
 
-        return (out, x2_out, x3_out, x4_out, x5_out) , x5_latent
+        return (out, x2_out, x3_out, x4_out, x5_out), x5_latent

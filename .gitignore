@@ -4,6 +4,5 @@ saved_checkpoints/
 best_weight/
 __pycache__/
 results/
-train_tl.py
-train_tl_gan.py
 .DS_Store
+.vscode/
