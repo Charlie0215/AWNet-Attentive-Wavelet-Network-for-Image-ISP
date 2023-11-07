@@ -17,7 +17,7 @@ from utils import (
     disassemble_ensembled_img,
     ensemble_ndarray,
     ensemble_pillow,
-    save_validation_image,
+    save_ensemble_image,
     to_psnr,
     to_ssim_skimage,
 )
@@ -29,7 +29,7 @@ class wrapped_3_channel(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.module = gen2(3, 3, block=[3, 3, 3, 4, 4])
+        self.module = gen2(3, 3, num_gcrdb=[3, 3, 3, 4, 4])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.module(x)
@@ -144,9 +144,9 @@ def test() -> None:
                 y = torch.zeros_like(y1[0])  # type: ignore
                 y = (y1[0] + y2[0]) / 2
         if ENSEMBLE:
-            save_validation_image(y, image_name, save_folder1)  # type: ignore
+            save_ensemble_image(y, image_name, save_folder1)  # type: ignore
         else:
-            save_validation_image(y, image_name, save_folder1)  # type: ignore
+            save_ensemble_image(y, image_name, save_folder1)  # type: ignore
 
 
 if __name__ == '__main__':

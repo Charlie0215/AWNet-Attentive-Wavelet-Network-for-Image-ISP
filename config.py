@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 
 
@@ -7,9 +8,9 @@ class trainConfig:
 
     batch_size = 3
     epoch = 50
-    pretrain = True
+    pretrain = False
 
-    data_dir = '/home/charliedai/aim2020/Dataset'
+    data_dir = '/home/cdai/dataset/awnet_dataset'
 
     checkpoints = './saved_checkpoints'
     if not os.path.exists(checkpoints):

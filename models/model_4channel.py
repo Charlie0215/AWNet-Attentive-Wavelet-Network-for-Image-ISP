@@ -10,7 +10,7 @@ from models.modules_4channel import GCRDB, ContextBlock2d, GCIWTResUp, GCWTResDo
 
 class AWNet(nn.Module):
 
-    def __init__(self, in_channels: int, out_channels: int, block: list[int] = [2, 2, 2, 3, 4]):
+    def __init__(self, in_channels: int, block: list[int] = [2, 2, 2, 3, 4]):
         super().__init__()
 
         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1)
@@ -65,11 +65,11 @@ class AWNet(nn.Module):
         self.sc_x3 = shortcutblock(256, 256)
         self.sc_x4 = shortcutblock(512, 512)
 
-        self.scale_5 = nn.Conv2d(1024, out_channels, kernel_size=3, padding=1)
-        self.scale_4 = nn.Conv2d(512, out_channels, kernel_size=3, padding=1)
-        self.scale_3 = nn.Conv2d(256, out_channels, kernel_size=3, padding=1)
-        self.scale_2 = nn.Conv2d(128, out_channels, kernel_size=3, padding=1)
-        self.scale_1 = nn.Conv2d(64, out_channels, kernel_size=3, padding=1)
+        self.scale_5 = nn.Conv2d(1024, 3, kernel_size=3, padding=1)
+        self.scale_4 = nn.Conv2d(512, 3, kernel_size=3, padding=1)
+        self.scale_3 = nn.Conv2d(256, 3, kernel_size=3, padding=1)
+        self.scale_2 = nn.Conv2d(128, 3, kernel_size=3, padding=1)
+        self.scale_1 = nn.Conv2d(64, 3, kernel_size=3, padding=1)
 
         self.se1 = SE_net(64, 64)
         self.se2 = SE_net(128, 128)

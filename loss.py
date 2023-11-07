@@ -70,10 +70,10 @@ class ms_Loss(Loss):
         target: torch.Tensor,
         texture_img: Optional[torch.Tensor] = None
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
-        loss = torch.Tensor(0)
-        total_l1 = torch.Tensor(0)
-        total_perceptual = torch.Tensor(0)
-        total_ssim = torch.Tensor(0)
+        loss = 0
+        total_l1 = 0
+        total_perceptual = 0
+        total_ssim = 0
         # scale 1
         if texture_img:
             l1 = self.charbonnier_loss(texture_img, target) * 0.25

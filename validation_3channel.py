@@ -10,7 +10,7 @@ from torchvision import transforms
 
 from config import trainConfig
 from models.model_3channel import AWNet
-from utils import disassemble_ensembled_img, ensemble_pillow, save_validation_image
+from utils import disassemble_ensembled_img, ensemble_pillow, save_ensemble_image
 
 ENSEMBLE = False
 
@@ -19,7 +19,7 @@ class wrapped_3_channel(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.module = AWNet(3, 3, block=[3, 3, 3, 4, 4])
+        self.module = AWNet(3, num_gcrdb=[3, 3, 3, 4, 4])
 
     def forward(self, x: torch.Tensor) -> None:
         return self.module(x)
@@ -102,9 +102,9 @@ def test() -> None:
             else:
                 y, _ = net(x)
         if ENSEMBLE:
-            save_validation_image(y, image_name, save_folder)  # type: ignore
+            save_ensemble_image(y, image_name, save_folder)  # type: ignore
         else:
-            save_validation_image(y[0], image_name, save_folder)
+            save_ensemble_image(y[0], image_name, save_folder)
 
 
 if __name__ == '__main__':

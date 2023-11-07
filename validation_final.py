@@ -13,7 +13,7 @@ from torchvision import transforms
 from config import trainConfig
 from models.model_3channel import AWNet as gen2
 from models.model_4channel import AWNet as gen1
-from utils import disassemble_ensembled_img, ensemble_ndarray, ensemble_pillow, save_validation_image
+from utils import disassemble_ensembled_img, ensemble_ndarray, ensemble_pillow, save_ensemble_image
 
 ENSEMBLE = True
 
@@ -76,7 +76,7 @@ def test() -> None:
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     net1 = gen1(4, 3, block=[3, 3, 3, 4, 4]).to(device)
-    net2 = gen2(3, 3, block=[3, 3, 3, 4, 4]).to(device)
+    net2 = gen2(3, 3, num_gcrdb=[3, 3, 3, 4, 4]).to(device)
     net1 = nn.DataParallel(net1, device_ids=device_ids)  # type: ignore
     net2 = nn.DataParallel(net2, device_ids=device_ids)  # type: ignore
 
@@ -123,9 +123,9 @@ def test() -> None:
                 y = torch.zeros_like(y1[0])  # type: ignore
                 y = (y1[0] + y2[0]) / 2
         if ENSEMBLE:
-            save_validation_image(y, image_name, save_folder)  # type: ignore
+            save_ensemble_image(y, image_name, save_folder)  # type: ignore
         else:
-            save_validation_image(y, image_name, save_folder)  # type: ignore
+            save_ensemble_image(y, image_name, save_folder)  # type: ignore
 
 
 if __name__ == '__main__':

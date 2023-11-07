@@ -12,7 +12,7 @@ from torchvision import transforms
 
 from config import trainConfig
 from models.model_4channel import AWNet
-from utils import disassemble_ensembled_img, ensemble_ndarray, ensemble_pillow, save_validation_image
+from utils import disassemble_ensembled_img, ensemble_ndarray, ensemble_pillow, save_ensemble_image
 
 ENSEMBLE = False
 
@@ -107,9 +107,9 @@ def test() -> None:
                 y1, _ = net1(raw_image)
                 y = y1[0]
         if ENSEMBLE:
-            save_validation_image(y, image_name, save_folder)
+            save_ensemble_image(y, image_name, save_folder)
         else:
-            save_validation_image(y, image_name, save_folder)
+            save_ensemble_image(y, image_name, save_folder)
 
 
 if __name__ == '__main__':

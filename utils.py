@@ -1,41 +1,31 @@
 # -*- coding: utf-8 -*-
+import dataclasses
+import logging
 import os
+import sys
 import time
 from datetime import datetime
 from math import log10
-from typing import Optional, Type
+from pathlib import Path
+from typing import Any, Optional, Type
 
+import dacite
 import numpy as np
 import PIL
 import torch
 import torch.nn.functional as F
 import torchvision
 import torchvision.utils as vutils
+import tqdm
+import yaml
 from PIL import Image
 from skimage import measure
+from skimage.metrics import structural_similarity
+from torch.utils.tensorboard import SummaryWriter
 from torchvision.transforms import Compose, ToPILImage, ToTensor
 
 
-def display_transform() -> torchvision.transforms.Compose:
-    return Compose([ToPILImage(), ToTensor()])
-
-
-def get_colors() -> np.ndarray:
-    '''
-    Dictionary of color map
-    '''
-    return np.asarray([0, 128, 255])
-
-
-def writer_add_image(dir: str, writer: torch.utils.tensorboard.SummaryWriter, image: np.ndarray, iter: int) -> None:
-    '''
-    tensorboard image writer
-    '''
-    x = vutils.make_grid(image, nrow=4)
-    writer.add_image(dir, x, iter)
-
-
-def save_image(target: torch.Tensor, preds: torch.Tensor, img_name: str, root: str) -> None:
+def save_image(target: torch.Tensor, preds: torch.Tensor, img_name: str, save_path: Path) -> None:
     '''
     : img: image to be saved
     : img_name: image name
@@ -45,11 +35,11 @@ def save_image(target: torch.Tensor, preds: torch.Tensor, img_name: str, root: s
     batch_num = len(preds)
 
     for ind in range(batch_num):
-        vutils.save_image(target[ind], root + f"{img_name[ind].split('.png')[0] + '_target.png'}")
-        vutils.save_image(preds[ind], root + f"{img_name[ind].split('.png')[0] + '_pred.png'}")
+        vutils.save_image(target[ind], save_path / f"{img_name[ind].split('.png')[0] + '_target.png'}")
+        vutils.save_image(preds[ind], save_path / f"{img_name[ind].split('.png')[0] + '_pred.png'}")
 
 
-def save_validation_image(preds: torch.Tensor, img_name: str, save_folder: str) -> None:
+def save_ensemble_image(preds: torch.Tensor, img_name: str, save_folder: Path) -> None:
     '''
     : img: image to be saved
     : img_name: image name
@@ -58,11 +48,10 @@ def save_validation_image(preds: torch.Tensor, img_name: str, save_folder: str) 
     batch_num = len(preds)
 
     for ind in range(batch_num):
-        print('saving {}'.format(img_name[ind]))
-        vutils.save_image(preds[ind], save_folder + '{}'.format(img_name[ind].split('.png')[0] + '.png'))
+        vutils.save_image(preds[ind], save_folder / f"{img_name[ind].split('.png')[0] + '.png'}")
 
 
-def ensemble_pillow(img: PIL.PngImagePlugin.PngImageFile) -> list[PIL.PngImagePlugin.PngImageFile]:
+def ensemble_pillow(img: Any) -> list:
     imgs = [
         img,  # 0
         img.rotate(90),  # 1
@@ -98,25 +87,28 @@ def disassemble_ensembled_img(imgs: torch.Tensor) -> torch.Tensor:
 
     mean_disassembled_img = sum(disassembled_img) / len(imgs)
 
-    return img  # type: ignore
+    return mean_disassembled_img  # type: ignore
 
 
-def validation(net: torch.nn.Module,
-               val_data_loader: torch.utils.DataLoader,
-               device: torch.device,
-               texture_net: Optional[torch.nn.Module] = None,
-               save_tag: bool = False,
-               mode: str = "student",
-               is_validation: bool = False,
-               is_ensemble: bool = False) -> tuple[float, float]:
+def in_training_validation(
+    net: torch.nn.Module,
+    val_data_loader: torch.utils.data.DataLoader,
+    device: torch.device,
+    log_dir: Path,
+    texture_net: Optional[torch.nn.Module] = None,
+    save_tag: bool = False,
+    mode: str = "student",
+    is_validation: bool = False,
+    is_ensemble: bool = False,
+) -> tuple[float, float]:
     psnr_list = []
     ssim_list = []
-    save_folder = os.path.join('./results', 'result_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '/')
+    save_folder = log_dir / \
+        f"result_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    save_folder.mkdir()
     net.eval()
-    if not os.path.exists(save_folder):
-        os.makedirs(save_folder)
 
-    for batch_id, val_data in enumerate(val_data_loader):
+    for val_data in tqdm.tqdm(val_data_loader):
         with torch.no_grad():  # type: ignore
             x, target, image_name = val_data
             target = target.to(device, non_blocking=True)
@@ -158,15 +150,15 @@ def validation(net: torch.nn.Module,
 
         # Save image
         if save_tag:
-            if mode == 'orig_size':
+            if mode == "orig_size":
                 save_image(target, y, image_name, save_folder)  # type: ignore
-            elif (mode == 'student' or mode == 'teacher') and is_validation == False:
+            elif (mode == "student" or mode == "teacher") and is_validation == False:
                 save_image(target, y[0], image_name, save_folder)
-            elif (mode == 'student' or mode == 'teacher') and is_validation == True:
+            elif (mode == "student" or mode == "teacher") and is_validation == True:
                 if is_ensemble:
-                    save_validation_image(y, image_name, './validation')  # type: ignore
+                    save_ensemble_image(y, image_name, save_folder.parent / "ensembled")  # type: ignore
                 else:
-                    save_validation_image(y[0], image_name, './validation')
+                    save_ensemble_image(y[0], image_name, save_folder.parent / "ensembled")
             elif mode == 'texture':
                 save_image(target, y, image_name, save_folder)  # type: ignore
 
@@ -176,14 +168,13 @@ def validation(net: torch.nn.Module,
     return avr_psnr, avr_ssim
 
 
-def to_psnr(dehaze: torch.Tenspr, gt: torch.Tensor) -> list[float]:
+def to_psnr(dehaze: torch.Tensor, gt: torch.Tensor) -> list[float]:
     mse = F.mse_loss(dehaze, gt, reduction='none')
     mse_split = torch.split(mse, 1, dim=0)  # type: ignore
     mse_list = [torch.mean(torch.squeeze(mse_split[ind])).item() for ind in range(len(mse_split))]
 
     # ToTensor scales input images to [0.0, 1.0]
-    intensity_max = 1.0
-    psnr_list = [10.0 * log10(intensity_max / mse) for mse in mse_list]
+    psnr_list = [10.0 * log10(1.0 / mse) for mse in mse_list]
     return psnr_list
 
 
@@ -196,7 +187,7 @@ def to_ssim_skimage(dehaze: torch.Tensor, gt: torch.Tensor) -> list[float]:
     ]
     gt_list_np = [gt_list[ind].permute(0, 2, 3, 1).data.cpu().numpy().squeeze() for ind in range(len(dehaze_list))]
     ssim_list = [
-        measure.compare_ssim(
+        structural_similarity(
             dehaze_list_np[ind],  # type: ignore
             gt_list_np[ind],
             data_range=1,
@@ -209,19 +200,15 @@ def to_ssim_skimage(dehaze: torch.Tensor, gt: torch.Tensor) -> list[float]:
     return ssim_list
 
 
-def print_log(epoch: int, num_epochs: int, one_epoch_time: str, train_psnr: float, val_psnr: float, val_ssim: float,
-              category: str) -> None:
-    print(
-        f"({one_epoch_time:.0f}s) Epoch [{epoch}/{num_epochs}], Train_PSNR:{train_psnr:.2f}, Val_PSNR:{train_psnr:.2f}, Val_SSIM:{val_psnr:.4f}"
-    )
-    # write training log
-    with open('./training_log/{}_log.txt'.format(category), 'a') as f:
-        print(
-            f"Date: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}s, Time_Cost: {one_epoch_time:.0f}s, Epoch: [{epoch}/{num_epochs}], Train_PSNR: {train_psnr:.2f}, Val_Image_PSNR: {val_psnr:.2f}, Val_Image_SSIM: {val_ssim:.4f}",
-            file=f)
+def get_log(epoch: int, num_epochs: int, one_epoch_time: str, train_psnr: float, val_psnr: float,
+            val_ssim: float) -> None:
+    logging.info(f"({one_epoch_time:.0f}s) Epoch [{epoch}/{num_epochs}], "
+                 f"Train_PSNR: {train_psnr:.2f}, Val_Image_PSNR: {val_psnr:.2f}, "
+                 f"Val_SSIM:{val_ssim:.4f}"
+                 f"Time_Cost: {one_epoch_time:.0f}s, ")
 
 
-def adjust_learning_rate(optimizer: Type[torch.optim.Optimizer], scheduler: Type[torch.optim.lr_scheduler], epoch: int,
+def adjust_learning_rate(optimizer: Type[torch.optim.Optimizer], scheduler: torch.optim.lr_scheduler, epoch: int,
                          learning_rate: float, writer: torch.utils.tensorboard.SummaryWriter) -> float:  # type: ignore
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
 
@@ -269,5 +256,37 @@ def adjust_learning_rate_step(optimizer: torch.optim.Optimizer, epoch: int, num_
 
     for param_group in optimizer.param_groups:
         param_group['lr'] = learning_rate[epoch // step]
-        print('Learning rate sets to {}.'.format(param_group['lr']))
+        logging.info(f"Learning rate sets to {param_group['lr']}.")
     return learning_rate[epoch // step]
+
+
+def setup_logging(log_base_dir: Path,
+                  experiment_name: str,
+                  logging_level: str = "INFO") -> tuple[Path, Path, SummaryWriter]:
+    root_log_folder = Path("runs/")
+    root_log_folder.mkdir(exist_ok=True)
+
+    log_dir = log_base_dir / \
+        f"{experiment_name}_{datetime.now().strftime('%b%d_%H-%M-%S')}"
+    log_dir.mkdir()
+
+    logging.basicConfig(
+        level=getattr(logging, logging_level),
+        format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+        handlers=[
+            logging.FileHandler(filename=str(log_dir / "log.txt")),
+            logging.StreamHandler(stream=sys.stdout),
+        ],
+    )
+    logging.info(f"Training job is logged at: {log_dir}")
+    checkpoint_saving_dir = log_dir / "checkpoints"
+    checkpoint_saving_dir.mkdir()
+    summary_writer = SummaryWriter(log_dir=str(log_dir / "tb_logs"))  # type: ignore
+    return log_dir, checkpoint_saving_dir, summary_writer
+
+
+def load_yaml_config(dataclass_type: Type[Any], config_path: Path) -> Type:
+    assert dataclasses.is_dataclass(dataclass_type), "dataclass_type is not a dataclass object"
+    with open(config_path, "r") as f:
+        yaml_dict = yaml.load(f, Loader=yaml.CLoader)
+    return dacite.from_dict(dataclass_type, yaml_dict)

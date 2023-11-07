@@ -1,50 +1,11 @@
 # -*- coding: utf-8 -*-
-from typing import Optional
+from typing import Optional, Type
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from models.utils import DWT, IWT
-
-
-class MakeDense(nn.Module):
-
-    def __init__(self, in_channels: int, growth_rate: int, kernel_size: int = 3) -> None:
-        super(MakeDense, self).__init__()
-        self.conv = nn.Conv2d(in_channels, growth_rate, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
-        self.norm_layer = nn.BatchNorm2d(growth_rate)  # type: ignore
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = F.relu(self.conv(x))
-        out = self.norm_layer(out)
-        out = torch.cat((x, out), 1)
-        return out
-
-
-class SE_net(nn.Module):
-
-    def __init__(self, in_channels: int, out_channels: int, reduction: int = 4, attention: bool = True) -> None:
-        super().__init__()
-        self.attention = attention
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.conv_in = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
-        self.conv_mid = nn.Conv2d(in_channels, in_channels // reduction, kernel_size=1, padding=0)
-        self.conv_out = nn.Conv2d(in_channels // reduction, out_channels, kernel_size=1, padding=0)
-
-        self.x_red = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-
-        if self.attention is True:
-            y = self.avg_pool(x)
-            y = F.relu(self.conv_in(y))
-            y = F.relu(self.conv_mid(y))
-            y = torch.sigmoid(self.conv_out(y))
-            x = self.x_red(x)
-            return x * y
-        else:
-            return x
 
 
 class ContextBlock2d(nn.Module):
@@ -55,7 +16,7 @@ class ContextBlock2d(nn.Module):
                  pool: str = 'att',
                  fusions: list[str] = ['channel_add'],
                  ratio: int = 4) -> None:
-        super().__init__()
+        super(ContextBlock2d, self).__init__()
         assert pool in ['avg', 'att']
         assert all([f in ['channel_add', 'channel_mul'] for f in fusions])
         assert len(fusions) > 0, 'at least one fusion should be used'
@@ -73,13 +34,13 @@ class ContextBlock2d(nn.Module):
                                                   nn.LayerNorm([self.planes // ratio, 1, 1]), nn.PReLU(),
                                                   nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1))
         else:
-            self.channel_add_conv = None  # type: ignore
+            self.channel_add_conv = None
         if 'channel_mul' in fusions:
             self.channel_mul_conv = nn.Sequential(nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
                                                   nn.LayerNorm([self.planes // ratio, 1, 1]), nn.PReLU(),
                                                   nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1))
         else:
-            self.channel_mul_conv = None  # type: ignore
+            self.channel_mul_conv = None
 
     def spatial_pool(self, x: torch.Tensor) -> torch.Tensor:
         batch, channel, height, width = x.size()
@@ -125,9 +86,71 @@ class ContextBlock2d(nn.Module):
         return out
 
 
+class GCRDB(nn.Module):
+
+    def __init__(self, in_channels: int, num_dense_layer: int = 6, growth_rate: int = 16):
+        super(GCRDB, self).__init__()
+        _in_channels = in_channels
+        modules = []
+
+        for i in range(num_dense_layer):
+            modules.append(MakeDense(_in_channels, growth_rate))
+            _in_channels += growth_rate
+
+        self.residual_dense_layers = nn.Sequential(*modules)
+        self.conv_1x1 = nn.Conv2d(_in_channels, in_channels, kernel_size=1, padding=0)
+        self.final_att = ContextBlock2d(inplanes=in_channels, planes=in_channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out_rdb = self.residual_dense_layers(x)
+        out_rdb = self.conv_1x1(out_rdb)
+        out_rdb = self.final_att(out_rdb)
+        out = out_rdb + x
+        return out
+
+
+class MakeDense(nn.Module):
+
+    def __init__(self, in_channels: int, growth_rate: int, kernel_size: int = 3) -> None:
+        super(MakeDense, self).__init__()
+        self.conv = nn.Conv2d(in_channels, growth_rate, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
+        self.norm_layer = nn.BatchNorm2d(growth_rate)  # type: ignore
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = F.relu(self.conv(x))
+        out = self.norm_layer(out)
+        out = torch.cat((x, out), 1)
+        return out
+
+
+class SE_net(nn.Module):
+
+    def __init__(self, in_channels: int, out_channels: int, reduction: int = 4, attention: bool = True) -> None:
+        super().__init__()
+        self.attention = attention
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.conv_in = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+        self.conv_mid = nn.Conv2d(in_channels, in_channels // reduction, kernel_size=1, padding=0)
+        self.conv_out = nn.Conv2d(in_channels // reduction, out_channels, kernel_size=1, padding=0)
+
+        self.x_red = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
+        if self.attention is True:
+            y = self.avg_pool(x)
+            y = F.relu(self.conv_in(y))
+            y = F.relu(self.conv_mid(y))
+            y = torch.sigmoid(self.conv_out(y))
+            x = self.x_red(x)
+            return x * y
+        else:
+            return x
+
+
 class GCWTResDown(nn.Module):
 
-    def __init__(self, in_channels: int, norm_layer: Optional[torch.nn.Module] = None) -> None:
+    def __init__(self, in_channels: int, norm_layer: torch.nn.Module = nn.BatchNorm2d) -> None:
         super().__init__()
         self.dwt = DWT()
         if norm_layer:
@@ -144,8 +167,9 @@ class GCWTResDown(nn.Module):
                                                             padding=1), nn.PReLU())
         self.conv1x1 = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
         self.conv_down = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, stride=2)
+        # self.att = att_block(in_channels * 2, in_channels * 2)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         stem = self.stem(x)
         xLL, dwt = self.dwt(x)
         res = self.conv1x1(xLL)
@@ -156,7 +180,7 @@ class GCWTResDown(nn.Module):
 
 class GCIWTResUp(nn.Module):
 
-    def __init__(self, in_channels: int, norm_layer: Optional[torch.nn.Module] = None) -> None:
+    def __init__(self, in_channels: int, norm_layer: Optional[Type[torch.nn.Module]] = None) -> None:
         super().__init__()
         if norm_layer:
             self.stem = nn.Sequential(
@@ -189,6 +213,8 @@ class GCIWTResUp(nn.Module):
         x_iwt = self.iwt(x_dwt)
         x_iwt = self.conv1x1(x_iwt)
         out = torch.cat([stem, x_iwt], dim=1)
+        # out = stem + x_iwt
+        # out = self.att(out)
         return out
 
 
@@ -198,7 +224,7 @@ class GCIWTResUp_1(nn.Module):
                  in_channels: int,
                  dwt_channels: int,
                  att_block: torch.nn.Module,
-                 norm_layer: Optional[torch.nn.Module] = None) -> None:
+                 norm_layer: Optional[Type[torch.nn.Module]] = None) -> None:
         super().__init__()
         if norm_layer:
             self.stem = nn.Sequential(
@@ -250,15 +276,16 @@ class shortcutblock(nn.Module):
 
 class PSPModule(nn.Module):
 
-    def __init__(self, features: int, out_features: int = 1024, sizes: tuple[int, ...] = (1, 2, 3, 6)) -> None:
+    def __init__(self, features: int, out_features: int = 1024, sizes: tuple[int, ...] = (1, 2, 3, 6)):
         super().__init__()
+        self.stages = []
         self.stages = nn.ModuleList([self._make_stage(features, size) for size in sizes])
         self.bottleneck = nn.Conv2d(features * (len(sizes) + 1), out_features, kernel_size=1)
         self.relu = nn.ReLU()
 
-    def _make_stage(self, features: int, size: int) -> torch.nn.Sequential:
+    def _make_stage(self, num_features: int, size: int) -> nn.Sequential:
         prior = nn.AdaptiveAvgPool2d(output_size=(size, size))
-        conv = nn.Conv2d(features, features, kernel_size=1, bias=False)
+        conv = nn.Conv2d(num_features, num_features, kernel_size=1, bias=False)
         return nn.Sequential(prior, conv)
 
     def forward(self, feats: torch.Tensor) -> torch.Tensor:
@@ -266,30 +293,3 @@ class PSPModule(nn.Module):
         priors = [F.upsample(input=stage(feats), size=(h, w), mode='bilinear') for stage in self.stages] + [feats]
         bottle = self.bottleneck(torch.cat(priors, 1))
         return self.relu(bottle)
-
-
-class GCRDB(nn.Module):
-
-    def __init__(self,
-                 in_channels: int,
-                 att_block: ContextBlock2d,
-                 num_dense_layer: int = 6,
-                 growth_rate: int = 16) -> None:
-        super(GCRDB, self).__init__()
-        _in_channels = in_channels
-        modules = []
-
-        for i in range(num_dense_layer):
-            modules.append(MakeDense(_in_channels, growth_rate))
-            _in_channels += growth_rate
-
-        self.residual_dense_layers = nn.Sequential(*modules)
-        self.conv_1x1 = nn.Conv2d(_in_channels, in_channels, kernel_size=1, padding=0)
-        self.final_att = att_block(inplanes=in_channels, planes=in_channels)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out_rdb = self.residual_dense_layers(x)
-        out_rdb = self.conv_1x1(out_rdb)
-        out_rdb = self.final_att(out_rdb)
-        out = out_rdb + x
-        return out

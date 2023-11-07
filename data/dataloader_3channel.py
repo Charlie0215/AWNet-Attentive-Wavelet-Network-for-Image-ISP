@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import random
+from pathlib import Path
 
 import numpy as np
 import PIL.Image as Image
@@ -13,45 +14,28 @@ from utils import ensemble_pillow
 to_tensor = transforms.Compose([transforms.ToTensor()])
 
 
-def extract_bayer_channels(raw: np.ndarray) -> np.ndarray:
-    # Reshape the input bayer image
-
-    ch_B = raw[1::2, 1::2]
-    ch_Gb = raw[0::2, 1::2]
-    ch_R = raw[0::2, 0::2]
-    ch_Gr = raw[1::2, 0::2]
-
-    RAW_combined = np.dstack((ch_B, ch_Gb, ch_R, ch_Gr))
-    RAW_norm = RAW_combined.astype(np.float32) / (4 * 255)
-
-    return RAW_norm
-
-
 class LoadData(Dataset):
 
     def __init__(self,
-                 dataset_dir: str,
-                 dataset_size: int,
+                 dataset_dir: Path,
                  dslr_scale: int,
                  test: bool = False,
-                 if_rotate: bool = True,
-                 if_filp: bool = True,
+                 is_rotate: bool = True,
+                 is_filp: bool = True,
                  is_ensemble: bool = False,
                  is_rescale: bool = False):
         self.is_ensemble = is_ensemble
         self.is_test = test
-        self.if_rotate = if_rotate
-        self.if_filp = if_filp
+        self.is_rotate = is_rotate
+        self.is_filp = is_filp
         self.is_rescale = is_rescale
         if self.is_test:
-            self.raw_dir = os.path.join(dataset_dir, 'test', 'test_vis')
-            self.dslr_dir = os.path.join(dataset_dir, 'test', 'canon')
-            self.dataset_size = dataset_size
+            self.raw_dir = dataset_dir / 'test' / 'demosaiced'
+            self.dslr_dir = dataset_dir / 'test' / 'canon'
         else:
-            self.raw_dir = os.path.join(dataset_dir, 'train', 'train_vis')
-            self.dslr_dir = os.path.join(dataset_dir, 'train', 'canon')
-
-        self.dataset_size = dataset_size
+            self.raw_dir = dataset_dir / 'train' / 'demosaiced'
+            self.dslr_dir = dataset_dir / 'train' / 'canon'
+        self.raw_paths = sorted(self.raw_dir.glob("*.png"))
         self.scale = dslr_scale
 
         self.tf1 = transforms.Compose([
@@ -69,14 +53,14 @@ class LoadData(Dataset):
         self.rotate = transforms.Compose([transforms.RandomRotation(degrees=(-45, 45))])
 
     def __len__(self) -> int:
-        return self.dataset_size
+        return len(self.raw_paths)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, str]:
-        raw_image = Image.open(os.path.join(self.raw_dir, str(idx) + ".png"))
-        dslr_image = Image.open(os.path.join(self.dslr_dir, str(idx) + ".jpg"))
+        raw_image = Image.open(self.raw_paths[idx])
+        dslr_image = Image.open(self.dslr_dir / self.raw_paths[idx].with_suffix(".jpg").name)
 
         if not self.is_test:
-            if self.if_rotate:
+            if self.is_rotate:
                 p = random.randint(0, 2)
                 if p == 0:
                     raw_image = self.tf1(raw_image)

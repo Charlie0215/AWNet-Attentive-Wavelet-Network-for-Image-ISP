@@ -23,18 +23,21 @@ If you want to reproduce our results from the AIM 2020 challenge, please follow 
 ## Training
 1. Generate pseudo-demosicing images for 3-channel-input model.
 ```
-    cd demosaic
-    python demosaic.py -data <directory contains your raw images> -save <directory to save your pseudo-demosaicing images>
+python script/demosaic.py -s /your/raw/image/path -d /your/saving/path
 ```
 Then, move the resulting folder of demosaicing images under your root dataset directory. Please make sure your dataset structure is the same as what we show in the <em>Training/Validation Dataset Strcuture</em> section.
-2. Change configuration in ```config.py``` accordingly and run
-```python train_3channel.py``` or ```python train_4channel.py```
+2. Change configuration in `config.py` accordingly and run
+
+```python train_3channel.py```
+
+or
+
+```python train_4channel.py```
 
 ## Testing
 1. Generate pseudo-demosicing images for 3-channel-input model.
 ```
-    cd demosaic
-    python script/demosaic.py -data <directory contains your raw images> -save <directory to save your pseudo-demosaicing images>
+python script/demosaic.py -s /your/raw/image/path -d /your/saving/path
 ```
 Then, move the resulting folder of demosaicing images under your root dataset directory.
 Please make sure your dataset structure is the same as what we show in the <em>Training/Validation Dataset Strcuture</em> section.
