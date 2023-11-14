@@ -5,10 +5,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from models.base_model import BaseModel
 from models.modules_4channel import GCRDB, ContextBlock2d, GCIWTResUp, GCWTResDown, SE_net, last_upsample, shortcutblock
 
 
-class AWNet(nn.Module):
+class AWNetFourChannel(nn.Module):
 
     def __init__(self, in_channels: int, block: list[int] = [2, 2, 2, 3, 4]):
         super().__init__()
@@ -18,28 +19,28 @@ class AWNet(nn.Module):
         _layer_1_dw = []
         for i in range(block[0]):
             _layer_1_dw.append(GCRDB(64, ContextBlock2d))
-        _layer_1_dw.append(GCWTResDown(64, ContextBlock2d, norm_layer=None))
+        _layer_1_dw.append(GCWTResDown(64))
         self.layer1 = nn.Sequential(*_layer_1_dw)
 
         # layer 2
         _layer_2_dw = []
         for i in range(block[1]):
             _layer_2_dw.append(GCRDB(128, ContextBlock2d))
-        _layer_2_dw.append(GCWTResDown(128, ContextBlock2d, norm_layer=None))
+        _layer_2_dw.append(GCWTResDown(128))
         self.layer2 = nn.Sequential(*_layer_2_dw)
 
         # layer 3
         _layer_3_dw = []
         for i in range(block[2]):
             _layer_3_dw.append(GCRDB(256, ContextBlock2d))
-        _layer_3_dw.append(GCWTResDown(256, ContextBlock2d, norm_layer=None))
+        _layer_3_dw.append(GCWTResDown(256))
         self.layer3 = nn.Sequential(*_layer_3_dw)
 
         # layer 4
         _layer_4_dw = []
         for i in range(block[3]):
             _layer_4_dw.append(GCRDB(512, ContextBlock2d))
-        _layer_4_dw.append(GCWTResDown(512, ContextBlock2d, norm_layer=None))
+        _layer_4_dw.append(GCWTResDown(512))
         self.layer4 = nn.Sequential(*_layer_4_dw)
 
         # layer 5
@@ -60,10 +61,10 @@ class AWNet(nn.Module):
         # upsample1
         self.layer1_up = GCIWTResUp(256, ContextBlock2d)
 
-        self.sc_x1 = shortcutblock(64, 64)
-        self.sc_x2 = shortcutblock(128, 128)
-        self.sc_x3 = shortcutblock(256, 256)
-        self.sc_x4 = shortcutblock(512, 512)
+        self.sc_x1 = shortcutblock(64)
+        self.sc_x2 = shortcutblock(128)
+        self.sc_x3 = shortcutblock(256)
+        self.sc_x4 = shortcutblock(512)
 
         self.scale_5 = nn.Conv2d(1024, 3, kernel_size=3, padding=1)
         self.scale_4 = nn.Conv2d(512, 3, kernel_size=3, padding=1)

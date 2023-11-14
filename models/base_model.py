@@ -5,11 +5,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.base_model import BaseModel
 from models.modules_3channel import GCRDB, ContextBlock2d, GCIWTResUp, GCWTResDown, PSPModule, SE_net, shortcutblock
+from models.utils import DWT, IWT
 
 
-class AWNetThreeChannel(nn.Module):
+class BaseModel(nn.Module):
 
     def __init__(self, in_channels: int, block: list[int] = [2, 2, 2, 3, 4]) -> None:
         super().__init__()

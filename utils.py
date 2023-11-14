@@ -168,8 +168,8 @@ def in_training_validation(
     return avr_psnr, avr_ssim
 
 
-def to_psnr(dehaze: torch.Tensor, gt: torch.Tensor) -> list[float]:
-    mse = F.mse_loss(dehaze, gt, reduction='none')
+def to_psnr(pred: torch.Tensor, gt: torch.Tensor) -> list[float]:
+    mse = F.mse_loss(pred, gt, reduction='none')
     mse_split = torch.split(mse, 1, dim=0)  # type: ignore
     mse_list = [torch.mean(torch.squeeze(mse_split[ind])).item() for ind in range(len(mse_split))]
 

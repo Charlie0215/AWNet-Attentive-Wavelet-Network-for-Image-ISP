@@ -16,7 +16,7 @@ to_tensor = transforms.Compose([transforms.ToTensor()])
 
 class LoadData(Dataset):
 
-    def __init__(self, dataset_dir: Path, dataset_size: int, dslr_scale: int, test: bool = False) -> None:
+    def __init__(self, dataset_dir: Path, dslr_scale: int, test: bool = False) -> None:
 
         if test:
             self.raw_dir = dataset_dir / 'test' / 'huawei_raw'
@@ -27,12 +27,11 @@ class LoadData(Dataset):
 
         self.raw_paths = sorted(self.raw_dir.glob("*.png"))
 
-        self.dataset_size = dataset_size
         self.scale = dslr_scale
         self.is_test = test
 
     def __len__(self) -> int:
-        return len(self.raw_paths)
+        return len(self.raw_paths[:100])
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, str]:
 
@@ -43,9 +42,6 @@ class LoadData(Dataset):
         dslr_image = imageio.imread(self.dslr_dir / self.raw_paths[idx].with_suffix(".jpg").name)
         dslr_image = np.asarray(dslr_image)
         dslr_img_shape = dslr_image.shape
-        dslr_image = np.float32(
-            np.array(
-                Image.fromarray(dslr_image).resize(
-                    (dslr_img_shape[0] // self.scale, dslr_img_shape[1] // self.scale)))) / 255.0
+        dslr_image = np.float32(np.array(Image.fromarray(dslr_image).resize((self.scale, self.scale)))) / 255.0
         dslr_image = torch.from_numpy(dslr_image.transpose((2, 0, 1)))
         return raw_image, dslr_image, str(idx)  # type: ignore

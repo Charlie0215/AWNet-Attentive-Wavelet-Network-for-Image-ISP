@@ -28,7 +28,7 @@ python script/demosaic.py -s /your/raw/image/path -d /your/saving/path
 Then, move the resulting folder of demosaicing images under your root dataset directory. Please make sure your dataset structure is the same as what we show in the <em>Training/Validation Dataset Strcuture</em> section.
 2. Change configuration in `config.py` accordingly and run
 
-```python train_3channel.py```
+```python train_3channel.py -c /path/to/config.yml```
 
 or
 

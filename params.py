@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 @dataclass
 class TrainingParams:
+    is_demosaic: bool
     experiment_name: str
     root_log_dir: str
     num_gpus: int

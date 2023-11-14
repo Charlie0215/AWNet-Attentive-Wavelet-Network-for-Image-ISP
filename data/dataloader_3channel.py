@@ -53,7 +53,7 @@ class LoadData(Dataset):
         self.rotate = transforms.Compose([transforms.RandomRotation(degrees=(-45, 45))])
 
     def __len__(self) -> int:
-        return len(self.raw_paths)
+        return len(self.raw_paths[:100])
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, str]:
         raw_image = Image.open(self.raw_paths[idx])

@@ -9,10 +9,11 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from config import trainConfig
-from data.dataloader_3channel import LoadData
+from data.dataloader_3channel import LoadData as LoadDataThreeChannel
+from data.dataloader_4channel import LoadData as LoadDataFourChannel
 from loss import ms_Loss
-from models.model_3channel import AWNet
+from models.model_3channel import AWNetThreeChannel
+from models.model_4channel import AWNetFourChannel
 from params import PipelineParams
 from utils import adjust_learning_rate_step, get_log, in_training_validation, load_yaml_config, setup_logging, to_psnr
 
@@ -33,12 +34,13 @@ def train(params: PipelineParams) -> None:
 
     ########## Initialize criterion and model ##########
     criterion = ms_Loss().to(device)
-    net = AWNet(in_channels=params.awnet_model_params.input_num_channels,
-                block=params.awnet_model_params.num_gcrdb).to(device)
+    awnet_class = AWNetFourChannel if params.training_params.is_demosaic else AWNetThreeChannel
+    net = awnet_class(in_channels=params.awnet_model_params.input_num_channels,
+                      block=params.awnet_model_params.num_gcrdb).to(device)
     net = nn.DataParallel(net, device_ids=params.training_params.device_list)  # type: ignore
 
     ########## Initialize model weight ##########
-    if trainConfig.pretrain == True:
+    if params.training_params.use_pretrained_weight == True:
         net.load_state_dict(torch.load(log_dir / "best-model.pkl", map_location=device)["model_state"])  # type: ignore
         logging.info('Pretrained weight loaded.')
     else:
@@ -51,9 +53,10 @@ def train(params: PipelineParams) -> None:
     optimizer = torch.optim.Adam(net.parameters(), lr=current_lr, betas=(0.9, 0.999))
 
     ########## Dataset and dataloader setup ##########
-    train_dataset = LoadData(Path(params.dataset_params.train_dataset_dir),
-                             dslr_scale=params.dataset_params.resized_size,
-                             test=False)
+    dataset = LoadDataFourChannel if params.training_params.is_demosaic else LoadDataThreeChannel
+    train_dataset = dataset(Path(params.dataset_params.train_dataset_dir),
+                            dslr_scale=params.dataset_params.resized_size,
+                            test=False)
     train_loader = DataLoader(dataset=train_dataset,
                               batch_size=params.dataloader_params.train.batch_size,
                               shuffle=params.dataloader_params.train.shuffle,
@@ -61,15 +64,15 @@ def train(params: PipelineParams) -> None:
                               pin_memory=params.dataloader_params.train.pin_memory,
                               drop_last=params.dataloader_params.train.drop_last)
 
-    test_dataset = LoadData(Path(params.dataset_params.val_dataset_dir),
-                            dslr_scale=params.dataset_params.resized_size,
-                            test=True)
+    test_dataset = dataset(Path(params.dataset_params.val_dataset_dir),
+                           dslr_scale=params.dataset_params.resized_size,
+                           test=True)
     test_loader = DataLoader(dataset=test_dataset,
-                             batch_size=8,
-                             shuffle=False,
-                             num_workers=18,
-                             pin_memory=True,
-                             drop_last=False)
+                             batch_size=params.dataloader_params.val.batch_size,
+                             shuffle=params.dataloader_params.val.shuffle,
+                             num_workers=params.dataloader_params.val.num_workers,
+                             pin_memory=params.dataloader_params.val.pin_memory,
+                             drop_last=params.dataloader_params.val.drop_last)
 
     logging.info('Train loader length: {}'.format(len(train_loader)))
 
@@ -79,7 +82,7 @@ def train(params: PipelineParams) -> None:
     logging.info('Previous PSNR: {:.4f} | Previous ssim: {:.4f}'.format(pre_psnr, pre_ssim))
 
     ########## Training iterations ##########
-    for epoch in range(trainConfig.epoch):
+    for epoch in range(params.training_params.num_epoch):
         psnr_list = []
         start_time = time.time()
         if epoch > 0:
@@ -114,10 +117,11 @@ def train(params: PipelineParams) -> None:
 
         one_epoch_time = time.time() - start_time
         logging.info(f"time: {one_epoch_time}, train psnr: {train_psnr}")
-        val_psnr, val_ssim = in_training_validation(net, test_loader, device, save_tag=True)  # type: ignore
+        val_psnr, val_ssim = in_training_validation(net, test_loader, device, log_dir=log_dir,
+                                                    save_tag=True)  # type: ignore
         get_log(
             epoch + 1,
-            trainConfig.epoch,
+            params.training_params.num_epoch,
             one_epoch_time,  # type: ignore
             train_psnr,
             val_psnr,

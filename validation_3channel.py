@@ -5,11 +5,11 @@ import numpy as np
 import PIL.Image as Image
 import torch
 import torch.nn as nn
+from config import trainConfig
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-from config import trainConfig
-from models.model_3channel import AWNet
+from models.model_3channel import AWNetThreeChannel
 from utils import disassemble_ensembled_img, ensemble_pillow, save_ensemble_image
 
 ENSEMBLE = False
@@ -19,7 +19,7 @@ class wrapped_3_channel(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.module = AWNet(3, num_gcrdb=[3, 3, 3, 4, 4])
+        self.module = AWNetThreeChannel(3, num_gcrdb=[3, 3, 3, 4, 4])
 
     def forward(self, x: torch.Tensor) -> None:
         return self.module(x)

@@ -1,9 +1,10 @@
 dataset_params:
-  resized_size: 224
+  resized_size: 448
   train_dataset_dir: "/home/cdai/dataset/awnet_dataset"
   val_dataset_dir: "/home/cdai/dataset/awnet_dataset"
 
 training_params:
+  is_demosaic: true
   experiment_name: "your_exp_name"
   root_log_dir: "runs/"
   num_gpus: 1
@@ -11,7 +12,7 @@ training_params:
   learning_rate_milestones: [0.0001, 0.00005, 0.00001, 0.0000005, 0.0000001]
   print_loss: true
   num_epoch: 50
-  use_pretrained_weight: true
+  use_pretrained_weight: false
   best_model_name: "best-model.pkl"
   logging_level: "DEBUG"
 
@@ -19,7 +20,7 @@ dataloader_params:
   train:
     num_workers: 32
     pin_memory: true
-    batch_size: 2
+    batch_size: 10
     shuffle: true
     drop_last: true
   val:
@@ -30,6 +31,6 @@ dataloader_params:
     drop_last: false
 
 awnet_model_params:
-  input_num_channels: 3
+  input_num_channels: 4
   # num of GCRDB blocks for each feature size
   num_gcrdb: [2, 2, 2, 3, 4]

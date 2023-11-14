@@ -7,11 +7,11 @@ import numpy as np
 import PIL.Image as Image
 import torch
 import torch.nn as nn
+from config import trainConfig
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-from config import trainConfig
-from models.model_4channel import AWNet
+from models.model_4channel import AWNetFourChannel
 from utils import disassemble_ensembled_img, ensemble_ndarray, ensemble_pillow, save_ensemble_image
 
 ENSEMBLE = False
@@ -21,7 +21,7 @@ class wrapped_4_channel(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.module = AWNet(4, 3, block=[3, 3, 3, 4, 4])
+        self.module = AWNetFourChannel(4, 3, block=[3, 3, 3, 4, 4])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.module(x)

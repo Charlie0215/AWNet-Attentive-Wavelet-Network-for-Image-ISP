@@ -7,12 +7,12 @@ import numpy as np
 import PIL.Image as Image
 import torch
 import torch.nn as nn
+from config import trainConfig
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-from config import trainConfig
-from models.model_3channel import AWNet as gen2
-from models.model_4channel import AWNet as gen1
+from models.model_3channel import AWNetThreeChannel as gen2
+from models.model_4channel import AWNetFourChannel as gen1
 from utils import (
     disassemble_ensembled_img,
     ensemble_ndarray,

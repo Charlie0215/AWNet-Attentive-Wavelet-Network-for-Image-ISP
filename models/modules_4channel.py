@@ -150,7 +150,7 @@ class ContextBlock2d(nn.Module):
 
 class GCWTResDown(nn.Module):
 
-    def __init__(self, in_channels: int, norm_layer: torch.nn.Module) -> None:
+    def __init__(self, in_channels: int, norm_layer: torch.nn.Module = nn.BatchNorm2d) -> None:
         super().__init__()
         self.dwt = DWT()
         if norm_layer:
@@ -179,7 +179,7 @@ class GCWTResDown(nn.Module):
 
 class GCIWTResUp(nn.Module):
 
-    def __init__(self, in_channels: int, norm_layer: torch.nn.Module) -> None:
+    def __init__(self, in_channels: int, norm_layer: Optional[torch.nn.Module] = None) -> None:
         super().__init__()
         if norm_layer:
             self.stem = nn.Sequential(
@@ -201,11 +201,9 @@ class GCIWTResUp(nn.Module):
             )
         self.pre_conv_stem = nn.Conv2d(in_channels // 2, in_channels, kernel_size=1, padding=0)
         self.pre_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
-        # self.prelu = nn.PReLU()
         self.post_conv = nn.Conv2d(in_channels // 4, in_channels // 4, kernel_size=1, padding=0)
         self.iwt = IWT()
         self.last_conv = nn.Conv2d(in_channels // 2, in_channels // 4, kernel_size=1, padding=0)
-        # self.se = SE_net(in_channels // 2, in_channels // 4)
 
     def forward(self, x: torch.Tensor, x_dwt: torch.Tensor) -> torch.Tensor:
         x = self.pre_conv_stem(x)
@@ -220,11 +218,11 @@ class GCIWTResUp(nn.Module):
 
 class shortcutblock(nn.Module):
 
-    def __init__(self, in_channels: int, out_channels: int) -> None:
+    def __init__(self, in_channels: int) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
-        self.se = SE_net(out_channels, out_channels)
+        self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
+        self.se = SE_net(in_channels, in_channels)
         self.relu = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
