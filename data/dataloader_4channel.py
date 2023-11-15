@@ -31,7 +31,7 @@ class LoadData(Dataset):
         self.is_test = test
 
     def __len__(self) -> int:
-        return len(self.raw_paths[:100])
+        return len(self.raw_paths)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, str]:
 
