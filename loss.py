@@ -7,7 +7,14 @@ from torch import nn
 from torchvision.models.vgg import vgg16
 
 import pytorch_ssim
+from dataclasses import dataclass
 
+@dataclass
+class LossObject:
+    total_loss: torch.Tensor
+    perceptual_loss: torch.Tensor
+    l1: torch.Tensor
+    ssim_loss: torch.Tensor
 
 class Loss(nn.Module):
 
@@ -24,15 +31,14 @@ class Loss(nn.Module):
         self,
         pred: torch.Tensor,
         target: torch.Tensor,
-        texture_img: Optional[torch.Tensor] = None
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    ) -> LossObject:
+        
         perceptual_loss = self.perceptual_loss(pred, target)
-        l1 = F.l1_loss(pred, target)
+        l1_loss = F.l1_loss(pred, target)
         ssim_loss = 1 - self.ssim_loss(pred, target)
-        del pred, target
-        total_loss = perceptual_loss + l1 + ssim_loss
+        total_loss = perceptual_loss + l1_loss + ssim_loss
 
-        return total_loss, (perceptual_loss, l1, ssim_loss)
+        return LossObject(total_loss, perceptual_loss, l1_loss, ssim_loss)
 
     def perceptual_loss(self, input_features: torch.Tensor, target_features: torch.Tensor) -> torch.Tensor:
 
@@ -69,7 +75,7 @@ class ms_Loss(Loss):
         y: torch.Tensor,
         target: torch.Tensor,
         texture_img: Optional[torch.Tensor] = None
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    ) -> LossObject:
         loss = 0
         total_l1 = 0
         total_perceptual = 0
@@ -104,4 +110,4 @@ class ms_Loss(Loss):
                 total_l1 += l1
                 loss += l1
 
-        return loss, (total_perceptual, total_l1, total_ssim)
+        return LossObject(loss, total_perceptual, total_l1, total_ssim)

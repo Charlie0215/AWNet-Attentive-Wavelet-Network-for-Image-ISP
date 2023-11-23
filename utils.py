@@ -40,10 +40,8 @@ def save_image(target: torch.Tensor, preds: torch.Tensor, img_name: str, save_pa
 
 
 def save_ensemble_image(preds: torch.Tensor, img_name: str, save_folder: Path) -> None:
-    '''
-    : img: image to be saved
-    : img_name: image name
-    '''
+    
+    
     preds = torch.split(preds, 1, dim=0)  # type: ignore
     batch_num = len(preds)
 

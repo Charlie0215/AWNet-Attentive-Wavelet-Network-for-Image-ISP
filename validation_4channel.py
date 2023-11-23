@@ -31,11 +31,8 @@ class LoadData_real(Dataset):
 
     def __init__(self, dataset_dir: str, is_ensemble: bool = False) -> None:
         self.is_ensemble = is_ensemble
-
         self.raw_dir = os.path.join(dataset_dir, 'AIM2020_ISP_fullres_test_raw')
-
         self.dataset_size = 42
-
         self.toTensor = transforms.Compose([transforms.ToTensor()])
 
     def __len__(self) -> int:

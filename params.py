@@ -36,12 +36,13 @@ class DataloaderParams:
 class PipelineDataloaderParams:
     train: DataloaderParams
     val: DataloaderParams
+    test: DataloaderParams
 
 
 @dataclass
 class AwnetParams:
     input_num_channels: int
-    # num of GCRDB blocks for each feature size
+    # number of GCRDB blocks for each feature size
     num_gcrdb: list[int]
 
 

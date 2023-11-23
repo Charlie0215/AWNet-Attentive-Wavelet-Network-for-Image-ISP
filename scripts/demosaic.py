@@ -14,17 +14,18 @@ def extract_bayer_channels(raw_image: np.ndarray) -> np.ndarray:
     ch_Gb = raw_image[0::2, 1::2]
     ch_R = raw_image[0::2, 0::2]
     ch_Gr = raw_image[1::2, 0::2]
-
+    
     ch_B = cv2.resize(ch_B, (ch_B.shape[1] * 2, ch_B.shape[0] * 2))
     ch_R = cv2.resize(ch_R, (ch_R.shape[1] * 2, ch_R.shape[0] * 2))
     ch_Gb = cv2.resize(ch_Gb, (ch_Gb.shape[1] * 2, ch_Gb.shape[0] * 2))
     ch_Gr = cv2.resize(ch_Gr, (ch_Gr.shape[1] * 2, ch_Gr.shape[0] * 2))
 
+    # Average the green channels
     ch_G = ch_Gb / 2 + ch_Gr / 2
-    RAW_combined = np.dstack((ch_B, ch_G, ch_R))
-    RAW_norm = RAW_combined.astype(np.float32) / (3 * 255)
+    pseudo_demosaiced_img = np.dstack((ch_B, ch_G, ch_R))
+    normalized_img = pseudo_demosaiced_img.astype(np.float32) / (3 * 255)
 
-    return RAW_norm
+    return normalized_img
 
 
 def process_imgs(root_path: str, saving_path: str) -> None:

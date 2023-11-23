@@ -29,6 +29,12 @@ dataloader_params:
     batch_size: 16
     shuffle: false
     drop_last: false
+  test:
+    num_workers: 8
+    pin_memory: true
+    batch_size: 1
+    shuffle: false
+    drop_last: false
 
 awnet_model_params:
   input_num_channels: 4

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from math import exp
 from typing import Optional, Union
 

@@ -135,7 +135,7 @@ def train(params: PipelineParams) -> None:
             }
 
             logging.info('Saved the best weight.')
-            torch.save(state, log_dir / "best_3channel.pkl")
+            torch.save(state, log_dir / params.training_params.best_model_name)
             pre_psnr = val_psnr
 
 
