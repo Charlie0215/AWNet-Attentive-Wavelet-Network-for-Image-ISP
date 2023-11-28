@@ -100,4 +100,4 @@ dmypy.json
 runs/
 .DS_Store
 .vscode/
-
+results/

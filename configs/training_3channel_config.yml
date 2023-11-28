@@ -18,7 +18,7 @@ training_params:
 
 dataloader_params:
   train:
-    num_workers: 32
+    num_workers: 64
     pin_memory: true
     batch_size: 2
     shuffle: true

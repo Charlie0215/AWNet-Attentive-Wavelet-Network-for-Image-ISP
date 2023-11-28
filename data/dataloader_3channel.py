@@ -9,12 +9,13 @@ import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from utils import ensemble_pillow
+from data.base_dataset import BaseDataset
+from utils import ensemble_ndarray
 
 to_tensor = transforms.Compose([transforms.ToTensor()])
 
 
-class LoadData(Dataset):
+class LoadData(BaseDataset):
 
     def __init__(self,
                  dataset_dir: Path,
@@ -24,19 +25,13 @@ class LoadData(Dataset):
                  is_filp: bool = True,
                  is_ensemble: bool = False,
                  is_rescale: bool = False):
+        super().__init__(dataset_dir, dslr_scale, "demosaiced", test)
+
         self.is_ensemble = is_ensemble
-        self.is_test = test
         self.is_rotate = is_rotate
         self.is_filp = is_filp
         self.is_rescale = is_rescale
-        if self.is_test:
-            self.raw_dir = dataset_dir / 'test' / 'demosaiced'
-            self.dslr_dir = dataset_dir / 'test' / 'canon'
-        else:
-            self.raw_dir = dataset_dir / 'train' / 'demosaiced'
-            self.dslr_dir = dataset_dir / 'train' / 'canon'
         self.raw_paths = sorted(self.raw_dir.glob("*.png"))
-        self.scale = dslr_scale
 
         self.tf1 = transforms.Compose([
             transforms.RandomVerticalFlip(p=1),
@@ -59,15 +54,14 @@ class LoadData(Dataset):
         raw_image = Image.open(self.raw_paths[idx])
         dslr_image = Image.open(self.dslr_dir / self.raw_paths[idx].with_suffix(".jpg").name)
 
-        if not self.is_test:
-            if self.is_rotate:
-                p = random.randint(0, 2)
-                if p == 0:
-                    raw_image = self.tf1(raw_image)
-                    dslr_image = self.tf1(dslr_image)
-                elif p == 1:
-                    raw_image = self.tf2(raw_image)
-                    dslr_image = self.tf2(dslr_image)
+        if not self.is_test and self.is_rotate:
+            p = random.randint(0, 2)
+            if p == 0:
+                raw_image = self.tf1(raw_image)
+                dslr_image = self.tf1(dslr_image)
+            elif p == 1:
+                raw_image = self.tf2(raw_image)
+                dslr_image = self.tf2(dslr_image)
 
         if self.is_rescale:
             raw_image = self.rescale(raw_image)
@@ -87,20 +81,15 @@ class LoadData(Dataset):
 class LoadData_real(Dataset):
 
     def __init__(self, dataset_dir: str, is_ensemble: bool = False) -> None:
+        self.raw_paths = sorted(Path(dataset_dir).glob("*.png"))
         self.is_ensemble = is_ensemble
-
-        self.raw_dir = dataset_dir
-
-        # self.dataset_size = 670
-        self.dataset_size = 42
-
         self.toTensor = transforms.Compose([transforms.ToTensor()])
 
     def __len__(self) -> int:
         return self.dataset_size
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, str]:
-        raw_image = Image.open(os.path.join(self.raw_dir, str(idx + 1) + ".png"))
+        raw_image = Image.open(str(self.raw_paths[idx]))
 
         if self.is_ensemble:
             raw_image = ensemble_pillow(raw_image)  # type: ignore

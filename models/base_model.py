@@ -5,11 +5,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.modules_3channel import GCRDB, ContextBlock2d, GCIWTResUp, GCWTResDown, PSPModule, SE_net, shortcutblock
-from models.utils import DWT, IWT
+# from models.base_model import BaseModel
+from models.modules_3channel import GCRDB, GCIWTResUp, GCWTResDown, PSPModule, SE_net, shortcutblock
 
 
-class BaseModel(nn.Module):
+class BaseNet(nn.Module):
 
     def __init__(self, in_channels: int, block: list[int] = [2, 2, 2, 3, 4]) -> None:
         super().__init__()
@@ -50,18 +50,6 @@ class BaseModel(nn.Module):
             _layer_5_dw.append(GCRDB(1024))
         self.layer5 = nn.Sequential(*_layer_5_dw)
 
-        # upsample4
-        self.layer4_up = GCIWTResUp(1024)
-
-        # upsample3
-        self.layer3_up = GCIWTResUp(512)
-
-        # upsample2
-        self.layer2_up = GCIWTResUp(256)
-
-        # upsample1
-        self.layer1_up = GCIWTResUp(128)
-
         self.sc_x1 = shortcutblock(64)
         self.sc_x2 = shortcutblock(128)
         self.sc_x3 = shortcutblock(256)
@@ -80,8 +68,6 @@ class BaseModel(nn.Module):
         self.se3 = SE_net(256, 256)
         self.se4 = SE_net(512, 512)
         self.se5 = SE_net(1024, 1024)
-
-        self.enhance = PSPModule(features=64, out_features=64, sizes=(1, 2, 3, 6))
 
     def forward(
         self, x: torch.Tensor

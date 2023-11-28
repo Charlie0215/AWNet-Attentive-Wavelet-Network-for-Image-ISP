@@ -5,8 +5,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.base_model import BaseModel
-from models.modules_3channel import GCRDB, ContextBlock2d, GCIWTResUp, GCWTResDown, PSPModule, SE_net, shortcutblock
+from models.modules import GCRDB, PSPModule, SE_net
+
+# from models.base_model import BaseModel
+from models.modules_3channel import GCIWTResUp, GCWTResDown, shortcutblock
 
 
 class AWNetThreeChannel(nn.Module):

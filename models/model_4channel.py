@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.base_model import BaseModel
+# from models.base_model import BaseModel
 from models.modules_4channel import GCRDB, ContextBlock2d, GCIWTResUp, GCWTResDown, SE_net, last_upsample, shortcutblock
 
 
@@ -81,7 +81,6 @@ class AWNetFourChannel(nn.Module):
         self.last = last_upsample()
 
     def forward(self, x: torch.Tensor):
-
         x1 = self.conv1(x)
 
         x2, x2_dwt = self.layer1(self.se1(x1))

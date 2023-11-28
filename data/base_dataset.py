@@ -22,12 +22,12 @@ def extract_bayer_channels(raw: np.ndarray) -> np.ndarray:
 
 class BaseDataset(Dataset):
 
-    def __init__(self, dataset_dir: Path, dslr_scale: int, test: bool = False) -> None:
+    def __init__(self, dataset_dir: Path, dslr_scale: int, gt_image_folder_name: str, test: bool = False) -> None:
         self.is_test = test
         self.scale = dslr_scale
         if self.is_test:
-            self.raw_dir = dataset_dir / 'test' / 'demosaiced'
+            self.raw_dir = dataset_dir / 'test' / gt_image_folder_name
             self.dslr_dir = dataset_dir / 'test' / 'canon'
         else:
-            self.raw_dir = dataset_dir / 'train' / 'demosaiced'
+            self.raw_dir = dataset_dir / 'train' / gt_image_folder_name
             self.dslr_dir = dataset_dir / 'train' / 'canon'

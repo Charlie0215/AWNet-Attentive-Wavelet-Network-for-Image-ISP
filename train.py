@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 
 from data.dataloader_3channel import LoadData as LoadDataThreeChannel
 from data.dataloader_4channel import LoadData as LoadDataFourChannel
-from loss import ms_Loss
+from loss import LossObject, ms_Loss
 from models.model_3channel import AWNetThreeChannel
 from models.model_4channel import AWNetFourChannel
 from params import PipelineParams
@@ -96,13 +96,13 @@ def train(params: PipelineParams) -> None:
 
             optimizer.zero_grad()
 
-            total_loss, _ = criterion(pred, target)
-            total_loss.backward()
+            training_loss: LossObject = criterion(pred, target)
+            training_loss.total_loss.backward()
             optimizer.step()
 
             if params.training_params.print_loss and batch_id % 1000 == 0:
                 logging.info(
-                    f'Epoch:{epoch}/{params.training_params.num_epoch} | Iteration:{batch_id} | Loss: {total_loss.item():.4f} '
+                    f'Epoch:{epoch}/{params.training_params.num_epoch} | Iteration:{batch_id} | Loss: {training_loss.total_loss.item():.4f} '
                 )
 
             psnr_list.extend(to_psnr(pred[0], target))  # type: ignore

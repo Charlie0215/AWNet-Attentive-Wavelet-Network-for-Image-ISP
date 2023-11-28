@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.modules import SE_net
 from models.utils import DWT, IWT
 
 
@@ -87,6 +86,29 @@ class ContextBlock2d(nn.Module):
         return out
 
 
+class GCRDB(nn.Module):
+
+    def __init__(self, in_channels: int, num_dense_layer: int = 6, growth_rate: int = 16):
+        super(GCRDB, self).__init__()
+        _in_channels = in_channels
+        modules = []
+
+        for i in range(num_dense_layer):
+            modules.append(MakeDense(_in_channels, growth_rate))
+            _in_channels += growth_rate
+
+        self.residual_dense_layers = nn.Sequential(*modules)
+        self.conv_1x1 = nn.Conv2d(_in_channels, in_channels, kernel_size=1, padding=0)
+        self.final_att = ContextBlock2d(inplanes=in_channels, planes=in_channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out_rdb = self.residual_dense_layers(x)
+        out_rdb = self.conv_1x1(out_rdb)
+        out_rdb = self.final_att(out_rdb)
+        out = out_rdb + x
+        return out
+
+
 class MakeDense(nn.Module):
 
     def __init__(self, in_channels: int, growth_rate: int, kernel_size: int = 3) -> None:
@@ -99,6 +121,31 @@ class MakeDense(nn.Module):
         out = self.norm_layer(out)
         out = torch.cat((x, out), 1)
         return out
+
+
+class SE_net(nn.Module):
+
+    def __init__(self, in_channels: int, out_channels: int, reduction: int = 4, attention: bool = True) -> None:
+        super().__init__()
+        self.attention = attention
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.conv_in = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+        self.conv_mid = nn.Conv2d(in_channels, in_channels // reduction, kernel_size=1, padding=0)
+        self.conv_out = nn.Conv2d(in_channels // reduction, out_channels, kernel_size=1, padding=0)
+
+        self.x_red = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
+        if self.attention is True:
+            y = self.avg_pool(x)
+            y = F.relu(self.conv_in(y))
+            y = F.relu(self.conv_mid(y))
+            y = torch.sigmoid(self.conv_out(y))
+            x = self.x_red(x)
+            return x * y
+        else:
+            return x
 
 
 class GCWTResDown(nn.Module):
@@ -179,3 +226,24 @@ class shortcutblock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.se(self.relu(self.conv2(self.relu(self.conv1(x)))))
+
+
+class PSPModule(nn.Module):
+
+    def __init__(self, features: int, out_features: int = 1024, sizes: tuple[int, ...] = (1, 2, 3, 6)):
+        super().__init__()
+        self.stages = []
+        self.stages = nn.ModuleList([self._make_stage(features, size) for size in sizes])
+        self.bottleneck = nn.Conv2d(features * (len(sizes) + 1), out_features, kernel_size=1)
+        self.relu = nn.ReLU()
+
+    def _make_stage(self, num_features: int, size: int) -> nn.Sequential:
+        prior = nn.AdaptiveAvgPool2d(output_size=(size, size))
+        conv = nn.Conv2d(num_features, num_features, kernel_size=1, bias=False)
+        return nn.Sequential(prior, conv)
+
+    def forward(self, feats: torch.Tensor) -> torch.Tensor:
+        h, w = feats.size(2), feats.size(3)
+        priors = [F.upsample(input=stage(feats), size=(h, w), mode='bilinear') for stage in self.stages] + [feats]
+        bottle = self.bottleneck(torch.cat(priors, 1))
+        return self.relu(bottle)
