@@ -19,8 +19,10 @@ class TrainingParams:
     def __post_init__(self) -> None:
         for i in range(1, len(self.learning_rate_milestones)):
             if self.learning_rate_milestones[i] >= self.learning_rate_milestones[i - 1]:
-                raise ValueError("Learning rate milestones should be strictly decreasing, "
-                                 f"but we have {self.learning_rate_milestones}")
+                raise ValueError(
+                    "Learning rate milestones should be strictly decreasing, "
+                    f"but we have {self.learning_rate_milestones}"
+                )
 
 
 @dataclass

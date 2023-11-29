@@ -10,7 +10,6 @@ from models.modules_4channel import GCRDB, ContextBlock2d, GCIWTResUp, GCWTResDo
 
 
 class AWNetFourChannel(nn.Module):
-
     def __init__(self, in_channels: int, block: list[int] = [2, 2, 2, 3, 4]):
         super().__init__()
 

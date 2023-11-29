@@ -16,33 +16,39 @@ to_tensor = transforms.Compose([transforms.ToTensor()])
 
 
 class LoadData(BaseDataset):
-
-    def __init__(self,
-                 dataset_dir: Path,
-                 dslr_scale: int,
-                 test: bool = False,
-                 is_rotate: bool = True,
-                 is_filp: bool = True,
-                 is_ensemble: bool = False,
-                 is_rescale: bool = False):
+    def __init__(
+        self,
+        dataset_dir: Path,
+        dslr_scale: int,
+        test: bool = False,
+        is_rotate: bool = True,
+        is_filp: bool = True,
+        is_ensemble: bool = False,
+        is_rescale: bool = False,
+    ):
         super().__init__(dataset_dir, dslr_scale, "demosaiced", test)
 
         self.is_ensemble = is_ensemble
         self.is_rotate = is_rotate
         self.is_filp = is_filp
         self.is_rescale = is_rescale
-        self.raw_paths = sorted(self.raw_dir.glob("*.png"))
 
-        self.tf1 = transforms.Compose([
-            transforms.RandomVerticalFlip(p=1),
-        ])
-        self.tf2 = transforms.Compose([
-            transforms.RandomHorizontalFlip(p=1),
-        ])
+        self.tf1 = transforms.Compose(
+            [
+                transforms.RandomVerticalFlip(p=1),
+            ]
+        )
+        self.tf2 = transforms.Compose(
+            [
+                transforms.RandomHorizontalFlip(p=1),
+            ]
+        )
 
-        self.rescale = transforms.Compose([
-            transforms.Resize((self.scale, self.scale)),
-        ])
+        self.rescale = transforms.Compose(
+            [
+                transforms.Resize((self.scale, self.scale)),
+            ]
+        )
 
         self.toTensor = transforms.Compose([transforms.ToTensor()])
         self.rotate = transforms.Compose([transforms.RandomRotation(degrees=(-45, 45))])
@@ -79,7 +85,6 @@ class LoadData(BaseDataset):
 
 
 class LoadData_real(Dataset):
-
     def __init__(self, dataset_dir: str, is_ensemble: bool = False) -> None:
         self.raw_paths = sorted(Path(dataset_dir).glob("*.png"))
         self.is_ensemble = is_ensemble

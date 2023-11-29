@@ -12,7 +12,6 @@ from models.modules_3channel import GCIWTResUp, GCWTResDown, shortcutblock
 
 
 class AWNetThreeChannel(nn.Module):
-
     def __init__(self, in_channels: int, block: list[int] = [2, 2, 2, 3, 4]) -> None:
         super().__init__()
 
@@ -88,7 +87,6 @@ class AWNetThreeChannel(nn.Module):
     def forward(
         self, x: torch.Tensor
     ) -> tuple[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]:
-
         x1 = self.conv1(x)
 
         x2, x2_dwt = self.layer1(self.se1(x1))

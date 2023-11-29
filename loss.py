@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -7,7 +8,7 @@ from torch import nn
 from torchvision.models.vgg import vgg16
 
 import pytorch_ssim
-from dataclasses import dataclass
+
 
 @dataclass
 class LossObject:
@@ -16,8 +17,8 @@ class LossObject:
     l1: torch.Tensor
     ssim_loss: torch.Tensor
 
-class Loss(nn.Module):
 
+class Loss(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         vgg = vgg16(True)
@@ -32,7 +33,6 @@ class Loss(nn.Module):
         pred: torch.Tensor,
         target: torch.Tensor,
     ) -> LossObject:
-        
         perceptual_loss = self.perceptual_loss(pred, target)
         l1_loss = F.l1_loss(pred, target)
         ssim_loss = 1 - self.ssim_loss(pred, target)
@@ -41,20 +41,17 @@ class Loss(nn.Module):
         return LossObject(total_loss, perceptual_loss, l1_loss, ssim_loss)
 
     def perceptual_loss(self, input_features: torch.Tensor, target_features: torch.Tensor) -> torch.Tensor:
-
         loss = self.mse_loss(self.loss_network(input_features), self.loss_network(target_features)) / 3
         return loss
 
-    def charbonnier_loss(self,
-                         input_features: torch.Tensor,
-                         target_features: torch.Tensor,
-                         eps: float = 1e-6) -> torch.Tensor:
+    def charbonnier_loss(
+        self, input_features: torch.Tensor, target_features: torch.Tensor, eps: float = 1e-6
+    ) -> torch.Tensor:
         diff = input_features - target_features
         loss = torch.mean(torch.sqrt(diff**2 + eps))
         return loss
 
     def tv_loss(self, x: torch.Tensor, TVLoss_weight: int = 1) -> torch.Tensor:
-
         def _tensor_size(t: torch.Tensor) -> int:
             return t.size()[1] * t.size()[2] * t.size()[3]
 
@@ -63,19 +60,13 @@ class Loss(nn.Module):
         w_x = x.size()[3]
         count_h = _tensor_size(x[:, :, 1:, :])
         count_w = _tensor_size(x[:, :, :, 1:])
-        h_tv = torch.pow((x[:, :, 1:, :] - x[:, :, :h_x - 1, :]), 2).sum()
-        w_tv = torch.pow((x[:, :, :, 1:] - x[:, :, :, :w_x - 1]), 2).sum()
+        h_tv = torch.pow((x[:, :, 1:, :] - x[:, :, : h_x - 1, :]), 2).sum()
+        w_tv = torch.pow((x[:, :, :, 1:] - x[:, :, :, : w_x - 1]), 2).sum()
         return TVLoss_weight * 2 * (h_tv / count_h + w_tv / count_w) / batch_size
 
 
 class ms_Loss(Loss):
-
-    def forward(
-        self,
-        y: torch.Tensor,
-        target: torch.Tensor,
-        texture_img: Optional[torch.Tensor] = None
-    ) -> LossObject:
+    def forward(self, y: torch.Tensor, target: torch.Tensor, texture_img: Optional[torch.Tensor] = None) -> LossObject:
         loss = 0
         total_l1 = 0
         total_perceptual = 0

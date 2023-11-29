@@ -1,24 +1,23 @@
+# -*- coding: utf-8 -*-
+import argparse
 import os
+from pathlib import Path
 
 import numpy as np
 import PIL.Image as Image
 import torch
 import torch.nn as nn
-from params import PipelineParams
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-import argparse
 
 from models.model_3channel import AWNetThreeChannel
-from utils import disassemble_ensembled_img, ensemble_pillow, save_ensemble_image
-from pathlib import Path
-from utils import load_yaml_config
+from params import PipelineParams
+from utils import disassemble_ensembled_img, ensemble_pillow, load_yaml_config, save_ensemble_image
 
 ENSEMBLE = False
 
 
 class wrapped_3_channel(nn.Module):
-
     def __init__(self) -> None:
         super().__init__()
         self.module = AWNetThreeChannel(3, num_gcrdb=[3, 3, 3, 4, 4])
@@ -28,10 +27,9 @@ class wrapped_3_channel(nn.Module):
 
 
 class LoadData_real(Dataset):
-
     def __init__(self, dataset_dir: str, is_ensemble: bool = False) -> None:
         self.is_ensemble = is_ensemble
-        self.raw_dir = os.path.join(dataset_dir, 'AIM2020_ISP_fullres_test_raw_pseudo_demosaicing')
+        self.raw_dir = os.path.join(dataset_dir, "AIM2020_ISP_fullres_test_raw_pseudo_demosaicing")
         self.dataset_size = 42
         self.toTensor = transforms.Compose([transforms.ToTensor()])
 
@@ -71,25 +69,26 @@ def test(args: argparse.ArgumentParser) -> None:
     log_folder: Path = args.log_folder
     saving_folder: Path = args.saving_folder
     net = AWNetThreeChannel(params.awnet_model_params.input_num_channels, params.awnet_model_params.num_gcrdb)
-    
+
     weight_path = log_folder / "checkpoints" / params.training_params.best_model_name
     net.load_state_dict(torch.load(weight_path, map_location="cpu")["model_state"])  # type: ignore
     print(f"Loaded weight from: {weight_path}")
 
     test_dataset = LoadData_real(params.dataset_params.train_dataset_dir, is_ensemble=ENSEMBLE)
-    test_loader = DataLoader(dataset=test_dataset,
-                             batch_size=params.dataloader_params.test.batch_size,
-                             shuffle=params.dataloader_params.test.shuffle,
-                             num_workers=params.dataloader_params.test.num_workers,
-                             pin_memory=params.dataloader_params.test.pin_memory,
-                             drop_last=params.dataloader_params.test.drop_last)
+    test_loader = DataLoader(
+        dataset=test_dataset,
+        batch_size=params.dataloader_params.test.batch_size,
+        shuffle=params.dataloader_params.test.shuffle,
+        num_workers=params.dataloader_params.test.num_workers,
+        pin_memory=params.dataloader_params.test.pin_memory,
+        drop_last=params.dataloader_params.test.drop_last,
+    )
 
     net.eval()
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
 
     for _, val_data in enumerate(test_loader):
-
         with torch.no_grad():  # type: ignore
             x, image_name = val_data
             if isinstance(x, list):
@@ -103,7 +102,7 @@ def test(args: argparse.ArgumentParser) -> None:
             save_ensemble_image(y[0], image_name, saving_folder)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Arguments for the training pipeline.")
     parser.add_argument("-c", "--config-file", type=Path, help="Path to the pipeline config.")
     parser.add_argument("-l", "--log-folder", type=Path, help="Path to the log folder that saves the training results.")

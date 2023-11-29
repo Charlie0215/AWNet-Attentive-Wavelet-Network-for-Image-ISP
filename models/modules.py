@@ -9,42 +9,49 @@ from models.utils import DWT, IWT
 
 
 class ContextBlock2d(nn.Module):
-
-    def __init__(self,
-                 inplanes: int = 9,
-                 planes: int = 32,
-                 pool: str = 'att',
-                 fusions: list[str] = ['channel_add'],
-                 ratio: int = 4) -> None:
+    def __init__(
+        self,
+        inplanes: int = 9,
+        planes: int = 32,
+        pool: str = "att",
+        fusions: list[str] = ["channel_add"],
+        ratio: int = 4,
+    ) -> None:
         super(ContextBlock2d, self).__init__()
-        assert pool in ['avg', 'att']
-        assert all([f in ['channel_add', 'channel_mul'] for f in fusions])
-        assert len(fusions) > 0, 'at least one fusion should be used'
+        assert pool in ["avg", "att"]
+        assert all([f in ["channel_add", "channel_mul"] for f in fusions])
+        assert len(fusions) > 0, "at least one fusion should be used"
         self.inplanes = inplanes
         self.planes = planes
         self.pool = pool
         self.fusions = fusions
-        if 'att' in pool:
+        if "att" in pool:
             self.conv_mask = nn.Conv2d(inplanes, 1, kernel_size=1)  # context Modeling
             self.softmax = nn.Softmax(dim=2)
         else:
             self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        if 'channel_add' in fusions:
-            self.channel_add_conv = nn.Sequential(nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
-                                                  nn.LayerNorm([self.planes // ratio, 1, 1]), nn.PReLU(),
-                                                  nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1))
+        if "channel_add" in fusions:
+            self.channel_add_conv = nn.Sequential(
+                nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
+                nn.LayerNorm([self.planes // ratio, 1, 1]),
+                nn.PReLU(),
+                nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1),
+            )
         else:
             self.channel_add_conv = None
-        if 'channel_mul' in fusions:
-            self.channel_mul_conv = nn.Sequential(nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
-                                                  nn.LayerNorm([self.planes // ratio, 1, 1]), nn.PReLU(),
-                                                  nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1))
+        if "channel_mul" in fusions:
+            self.channel_mul_conv = nn.Sequential(
+                nn.Conv2d(self.inplanes, self.planes // ratio, kernel_size=1),
+                nn.LayerNorm([self.planes // ratio, 1, 1]),
+                nn.PReLU(),
+                nn.Conv2d(self.planes // ratio, self.inplanes, kernel_size=1),
+            )
         else:
             self.channel_mul_conv = None
 
     def spatial_pool(self, x: torch.Tensor) -> torch.Tensor:
         batch, channel, height, width = x.size()
-        if self.pool == 'att':
+        if self.pool == "att":
             input_x = x
             # [N, C, H * W]
             input_x = input_x.view(batch, channel, height * width)
@@ -87,7 +94,6 @@ class ContextBlock2d(nn.Module):
 
 
 class GCRDB(nn.Module):
-
     def __init__(self, in_channels: int, num_dense_layer: int = 6, growth_rate: int = 16):
         super(GCRDB, self).__init__()
         _in_channels = in_channels
@@ -110,7 +116,6 @@ class GCRDB(nn.Module):
 
 
 class MakeDense(nn.Module):
-
     def __init__(self, in_channels: int, growth_rate: int, kernel_size: int = 3) -> None:
         super(MakeDense, self).__init__()
         self.conv = nn.Conv2d(in_channels, growth_rate, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
@@ -124,7 +129,6 @@ class MakeDense(nn.Module):
 
 
 class SE_net(nn.Module):
-
     def __init__(self, in_channels: int, out_channels: int, reduction: int = 4, attention: bool = True) -> None:
         super().__init__()
         self.attention = attention
@@ -136,7 +140,6 @@ class SE_net(nn.Module):
         self.x_red = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
         if self.attention is True:
             y = self.avg_pool(x)
             y = F.relu(self.conv_in(y))
@@ -149,22 +152,25 @@ class SE_net(nn.Module):
 
 
 class GCWTResDown(nn.Module):
-
     def __init__(self, in_channels: int, norm_layer: torch.nn.Module = nn.BatchNorm2d) -> None:
         super().__init__()
         self.dwt = DWT()
         if norm_layer:
-            self.stem = nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=1),
-                                      norm_layer(in_channels), nn.PReLU(),
-                                      nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
-                                      norm_layer(in_channels), nn.PReLU())
+            self.stem = nn.Sequential(
+                nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=1),
+                norm_layer(in_channels),
+                nn.PReLU(),
+                nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
+                norm_layer(in_channels),
+                nn.PReLU(),
+            )
         else:
-            self.stem = nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=1),
-                                      nn.PReLU(), nn.Conv2d(in_channels,
-                                                            in_channels,
-                                                            kernel_size=3,
-                                                            stride=1,
-                                                            padding=1), nn.PReLU())
+            self.stem = nn.Sequential(
+                nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=1),
+                nn.PReLU(),
+                nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
+                nn.PReLU(),
+            )
         self.conv1x1 = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
         self.conv_down = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, stride=2)
         # self.att = att_block(in_channels * 2, in_channels * 2)
@@ -179,12 +185,11 @@ class GCWTResDown(nn.Module):
 
 
 class GCIWTResUp(nn.Module):
-
     def __init__(self, in_channels: int, norm_layer: Optional[Type[torch.nn.Module]] = None) -> None:
         super().__init__()
         if norm_layer:
             self.stem = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
                 nn.Conv2d(in_channels, in_channels // 2, kernel_size=3, padding=1),
                 norm_layer(in_channels // 2),
                 nn.PReLU(),
@@ -194,7 +199,7 @@ class GCIWTResUp(nn.Module):
             )
         else:
             self.stem = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
                 nn.Conv2d(in_channels, in_channels // 2, kernel_size=3, padding=1),
                 nn.PReLU(),
                 nn.Conv2d(in_channels // 2, in_channels // 4, kernel_size=3, padding=1),
@@ -216,7 +221,6 @@ class GCIWTResUp(nn.Module):
 
 
 class shortcutblock(nn.Module):
-
     def __init__(self, in_channels: int) -> None:
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
@@ -229,7 +233,6 @@ class shortcutblock(nn.Module):
 
 
 class PSPModule(nn.Module):
-
     def __init__(self, features: int, out_features: int = 1024, sizes: tuple[int, ...] = (1, 2, 3, 6)):
         super().__init__()
         self.stages = []
@@ -244,6 +247,6 @@ class PSPModule(nn.Module):
 
     def forward(self, feats: torch.Tensor) -> torch.Tensor:
         h, w = feats.size(2), feats.size(3)
-        priors = [F.upsample(input=stage(feats), size=(h, w), mode='bilinear') for stage in self.stages] + [feats]
+        priors = [F.upsample(input=stage(feats), size=(h, w), mode="bilinear") for stage in self.stages] + [feats]
         bottle = self.bottleneck(torch.cat(priors, 1))
         return self.relu(bottle)
