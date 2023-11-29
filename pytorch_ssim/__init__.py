@@ -138,9 +138,7 @@ class SSIM(torch.nn.Module):
             self.window = window
             self.channel = channel
 
-        return ssim(  # type: ignore
-            img1, img2, window=window, window_size=self.window_size, size_average=self.size_average
-        )
+        return ssim(img1, img2, window=window, window_size=self.window_size, size_average=self.size_average)  # type: ignore
 
 
 class MSSSIM(torch.nn.Module):

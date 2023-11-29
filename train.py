@@ -83,9 +83,7 @@ def train(params: PipelineParams) -> None:
     logging.info("Train loader length: {}".format(len(train_loader)))
 
     ########## Compute baseline psnr and ssim ##########
-    pre_psnr, pre_ssim = in_training_validation(
-        net, test_loader, device, save_tag=True, log_dir=log_dir
-    )  # type: ignore
+    pre_psnr, pre_ssim = in_training_validation(net, test_loader, device, save_tag=True, log_dir=log_dir)  # type: ignore
     logging.info("Previous PSNR: {:.4f} | Previous ssim: {:.4f}".format(pre_psnr, pre_ssim))
 
     ########## Training iterations ##########
@@ -125,12 +123,8 @@ def train(params: PipelineParams) -> None:
 
         one_epoch_time = time.time() - start_time
         logging.info(f"time: {one_epoch_time}, train psnr: {train_psnr}")
-        val_psnr, val_ssim = in_training_validation(
-            net, test_loader, device, log_dir=log_dir, save_tag=True
-        )  # type: ignore
-        get_log(
-            epoch + 1, params.training_params.num_epoch, one_epoch_time, train_psnr, val_psnr, val_ssim  # type: ignore
-        )
+        val_psnr, val_ssim = in_training_validation(net, test_loader, device, log_dir=log_dir, save_tag=True)  # type: ignore
+        get_log(epoch + 1, params.training_params.num_epoch, one_epoch_time, train_psnr, val_psnr, val_ssim)  # type: ignore
 
         # Update the best psnr, note that we use psnr to choose our best model
         if val_psnr >= pre_psnr:

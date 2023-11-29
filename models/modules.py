@@ -8,6 +8,29 @@ import torch.nn.functional as F
 from models.utils import DWT, IWT
 
 
+class SE_net(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int, reduction: int = 4, attention: bool = True) -> None:
+        super().__init__()
+        self.attention = attention
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.conv_in = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+        self.conv_mid = nn.Conv2d(in_channels, in_channels // reduction, kernel_size=1, padding=0)
+        self.conv_out = nn.Conv2d(in_channels // reduction, out_channels, kernel_size=1, padding=0)
+
+        self.x_red = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.attention is True:
+            y = self.avg_pool(x)
+            y = F.relu(self.conv_in(y))
+            y = F.relu(self.conv_mid(y))
+            y = torch.sigmoid(self.conv_out(y))
+            x = self.x_red(x)
+            return x * y
+        else:
+            return x
+
+
 class ContextBlock2d(nn.Module):
     def __init__(
         self,
@@ -93,6 +116,19 @@ class ContextBlock2d(nn.Module):
         return out
 
 
+class MakeDense(nn.Module):
+    def __init__(self, in_channels: int, growth_rate: int, kernel_size: int = 3) -> None:
+        super(MakeDense, self).__init__()
+        self.conv = nn.Conv2d(in_channels, growth_rate, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
+        self.norm_layer = nn.BatchNorm2d(growth_rate)  # type: ignore
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = F.relu(self.conv(x))
+        out = self.norm_layer(out)
+        out = torch.cat((x, out), 1)
+        return out
+
+
 class GCRDB(nn.Module):
     def __init__(self, in_channels: int, num_dense_layer: int = 6, growth_rate: int = 16):
         super(GCRDB, self).__init__()
@@ -113,42 +149,6 @@ class GCRDB(nn.Module):
         out_rdb = self.final_att(out_rdb)
         out = out_rdb + x
         return out
-
-
-class MakeDense(nn.Module):
-    def __init__(self, in_channels: int, growth_rate: int, kernel_size: int = 3) -> None:
-        super(MakeDense, self).__init__()
-        self.conv = nn.Conv2d(in_channels, growth_rate, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
-        self.norm_layer = nn.BatchNorm2d(growth_rate)  # type: ignore
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = F.relu(self.conv(x))
-        out = self.norm_layer(out)
-        out = torch.cat((x, out), 1)
-        return out
-
-
-class SE_net(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, reduction: int = 4, attention: bool = True) -> None:
-        super().__init__()
-        self.attention = attention
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.conv_in = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
-        self.conv_mid = nn.Conv2d(in_channels, in_channels // reduction, kernel_size=1, padding=0)
-        self.conv_out = nn.Conv2d(in_channels // reduction, out_channels, kernel_size=1, padding=0)
-
-        self.x_red = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.attention is True:
-            y = self.avg_pool(x)
-            y = F.relu(self.conv_in(y))
-            y = F.relu(self.conv_mid(y))
-            y = torch.sigmoid(self.conv_out(y))
-            x = self.x_red(x)
-            return x * y
-        else:
-            return x
 
 
 class GCWTResDown(nn.Module):
@@ -184,7 +184,7 @@ class GCWTResDown(nn.Module):
         return out, dwt
 
 
-class GCIWTResUp(nn.Module):
+class GCIWTResUpThreeChannel(nn.Module):
     def __init__(self, in_channels: int, norm_layer: Optional[Type[torch.nn.Module]] = None) -> None:
         super().__init__()
         if norm_layer:
@@ -220,7 +220,45 @@ class GCIWTResUp(nn.Module):
         return out
 
 
-class shortcutblock(nn.Module):
+class GCIWTResUpFourChannel(nn.Module):
+    def __init__(self, in_channels: int, norm_layer: Optional[torch.nn.Module] = None) -> None:
+        super().__init__()
+        if norm_layer:
+            self.stem = nn.Sequential(
+                nn.PixelShuffle(2),
+                nn.Conv2d(in_channels // 4, in_channels // 4, kernel_size=3, padding=1),
+                norm_layer(in_channels // 4),
+                nn.PReLU(),
+                nn.Conv2d(in_channels // 4, in_channels // 4, kernel_size=3, padding=1),
+                norm_layer(in_channels // 4),
+                nn.PReLU(),
+            )
+        else:
+            self.stem = nn.Sequential(
+                nn.PixelShuffle(2),
+                nn.Conv2d(in_channels // 4, in_channels // 4, kernel_size=3, padding=1),
+                nn.PReLU(),
+                nn.Conv2d(in_channels // 4, in_channels // 4, kernel_size=3, padding=1),
+                nn.PReLU(),
+            )
+        self.pre_conv_stem = nn.Conv2d(in_channels // 2, in_channels, kernel_size=1, padding=0)
+        self.pre_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+        self.post_conv = nn.Conv2d(in_channels // 4, in_channels // 4, kernel_size=1, padding=0)
+        self.iwt = IWT()
+        self.last_conv = nn.Conv2d(in_channels // 2, in_channels // 4, kernel_size=1, padding=0)
+
+    def forward(self, x: torch.Tensor, x_dwt: torch.Tensor) -> torch.Tensor:
+        x = self.pre_conv_stem(x)
+        stem = self.stem(x)
+        x_dwt = self.pre_conv(x_dwt)
+        x_iwt = self.iwt(x_dwt)
+        x_iwt = self.post_conv(x_iwt)
+        out = torch.cat((stem, x_iwt), dim=1)
+        out = self.last_conv(out)
+        return out
+
+
+class ShortcutBlock(nn.Module):
     def __init__(self, in_channels: int) -> None:
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
@@ -247,6 +285,26 @@ class PSPModule(nn.Module):
 
     def forward(self, feats: torch.Tensor) -> torch.Tensor:
         h, w = feats.size(2), feats.size(3)
-        priors = [F.upsample(input=stage(feats), size=(h, w), mode="bilinear") for stage in self.stages] + [feats]
+        priors = [F.interpolate(input=stage(feats), size=(h, w), mode="bilinear") for stage in self.stages] + [feats]
         bottle = self.bottleneck(torch.cat(priors, 1))
         return self.relu(bottle)
+
+
+class FourChannelLastUpsample(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self._up = nn.PixelShuffle(2)
+        self._pre_enhance = nn.Conv2d(16, 16, kernel_size=3, padding=1)
+        self._enhance = PSPModule(16, 16)
+        self._post_conv = nn.Conv2d(32, 32, kernel_size=3, padding=1)
+        self._se = SE_net(32, 32)
+        self._final = nn.Conv2d(32, 3, kernel_size=3, padding=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self._up(x)
+        x = self._pre_enhance(x)
+        enhanced = self._enhance(x)
+        x = torch.cat((enhanced, x), dim=1)
+        out = self._se(self._post_conv(x))
+        out = self._final(out)
+        return torch.sigmoid(out)

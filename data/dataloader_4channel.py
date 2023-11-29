@@ -15,6 +15,9 @@ to_tensor = transforms.Compose([transforms.ToTensor()])
 
 
 class LoadData(BaseDataset):
+    def __init__(self, dataset_dir: Path, dslr_scale: int, test: bool = False) -> None:
+        super().__init__(dataset_dir, dslr_scale, "huawei_raw", test)
+
     def __len__(self) -> int:
         return len(self.raw_paths)
 

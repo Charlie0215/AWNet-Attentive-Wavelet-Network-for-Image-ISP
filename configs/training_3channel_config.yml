@@ -18,13 +18,13 @@ training_params:
 
 dataloader_params:
   train:
-    num_workers: 64
+    num_workers: 24
     pin_memory: true
     batch_size: 2
     shuffle: true
     drop_last: true
   val:
-    num_workers: 8
+    num_workers: 24
     pin_memory: true
     batch_size: 16
     shuffle: false
